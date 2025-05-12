@@ -10,9 +10,6 @@ class SoundService {
     this.sounds = {};
     this.soundsEnabled = true;
     this.loadSoundsEnabled();
-    
-    // Don't preload sounds in constructor
-    // Will preload when needed instead
   }
   
   async loadSoundsEnabled() {
@@ -32,45 +29,22 @@ class SoundService {
     
     return new Promise((resolve) => {
       try {
-        // Sound file paths - these match your actual file locations
-        const soundPaths = {
-          buttonpress: require('../../assets/sounds/buttonpress.mp3'),
-          menuMusic: require('../../assets/sounds/menu_music.mp3'), // Adjusted filename to use underscores
-          gameMusic: require('../../assets/sounds/gamemusic.mp3'),
-          streak: require('../../assets/sounds/streak.mp3'),
-          correct: require('../../assets/sounds/correct.mp3'),
-          incorrect: require('../../assets/sounds/incorrect.mp3')
-        };
+        console.log("Starting to initialize sounds...");
         
-        // Track how many sounds have loaded
-        let loadedCount = 0;
-        const totalSounds = Object.keys(soundPaths).length;
+        // Load each sound individually for better error isolation
+        this._loadSound('buttonpress', require('../../assets/sounds/buttonpress.mp3'));
+        this._loadSound('menuMusic', require('../../assets/sounds/menu_music.mp3'));
+        this._loadSound('gameMusic', require('../../assets/sounds/gamemusic.mp3'));
+        this._loadSound('streak', require('../../assets/sounds/streak.mp3'));
+        this._loadSound('correct', require('../../assets/sounds/correct.mp3'));
+        this._loadSound('incorrect', require('../../assets/sounds/incorrect.mp3'));
         
-        // Load each sound
-        Object.entries(soundPaths).forEach(([key, soundPath]) => {
-          const sound = new Sound(soundPath, (error) => {
-            if (error) {
-              console.error(`Failed to load sound ${key}:`, error);
-              // Create a dummy sound object for this failed sound
-              this.sounds[key] = this._createDummySound(key);
-            } else {
-              // Success - sound is loaded
-              console.log(`Sound ${key} loaded successfully`);
-              this.sounds[key] = sound;
-              
-              // Set volume and loop settings for background music
-              if (key === 'menuMusic' || key === 'gameMusic') {
-                sound.setVolume(0.5);
-              }
-            }
-            
-            // Track progress
-            loadedCount++;
-            if (loadedCount === totalSounds) {
-              resolve();
-            }
-          });
-        });
+        // Give a little time for sounds to initialize before resolving
+        setTimeout(() => {
+          const loadedCount = Object.keys(this.sounds).length;
+          console.log(`Initialized ${loadedCount} sounds`);
+          resolve();
+        }, 500);
       } catch (error) {
         console.error("Error initializing sounds:", error);
         
@@ -79,6 +53,33 @@ class SoundService {
         resolve();
       }
     });
+  }
+  
+  // Helper method to load an individual sound
+  _loadSound(key, soundPath) {
+    try {
+      console.log(`Attempting to load sound: ${key}`);
+      
+      const sound = new Sound(soundPath, (error) => {
+        if (error) {
+          console.error(`Failed to load sound ${key}:`, error);
+          // Create a dummy sound for this failed sound
+          this.sounds[key] = this._createDummySound(key);
+        } else {
+          // Success - sound is loaded
+          console.log(`Sound ${key} loaded successfully`);
+          this.sounds[key] = sound;
+          
+          // Set volume and loop settings for background music
+          if (key === 'menuMusic' || key === 'gameMusic') {
+            sound.setVolume(0.5);
+          }
+        }
+      });
+    } catch (e) {
+      console.error(`Error loading sound ${key}:`, e);
+      this.sounds[key] = this._createDummySound(key);
+    }
   }
   
   // Create a dummy sound object that logs instead of playing
@@ -150,6 +151,8 @@ class SoundService {
     
     return sound;
   }
+  
+  // Rest of the methods remain unchanged
   
   stop(soundName) {
     if (this.sounds[soundName] && this.sounds[soundName].stop) {
