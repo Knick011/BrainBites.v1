@@ -1,11 +1,24 @@
-// src/screens/QuizScreen.js
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ActivityIndicator } from 'react-native';
+// src/screens/QuizScreen.js (modified to match web version's style)
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  SafeAreaView, 
+  ActivityIndicator,
+  Animated,
+  Easing,
+  ScrollView
+} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import QuizService from '../services/QuizService';
 import TimerService from '../services/TimerService';
 import SoundService from '../services/SoundService';
-import MascotDisplay from '../components/mascot/MascotDisplay';
+import EnhancedMascotDisplay from '../components/mascot/EnhancedMascotDisplay';
+import theme from '../styles/theme';
+import commonStyles from '../styles/commonStyles';
+import animations from '../styles/animations';
 
 const QuizScreen = ({ navigation, route }) => {
   const [currentQuestion, setCurrentQuestion] = useState(null);
@@ -19,15 +32,39 @@ const QuizScreen = ({ navigation, route }) => {
   const [category, setCategory] = useState(route.params?.category || 'funfacts');
   const [mascotType, setMascotType] = useState('gamemode');
   const [mascotMessage, setMascotMessage] = useState(null);
+  const [showPointsAnimation, setShowPointsAnimation] = useState(false);
+  const [pointsEarned, setPointsEarned] = useState(0);
+  
+  // Animation values
+  const cardAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const optionsAnim = useRef([]).current;
+  const explanationAnim = useRef(new Animated.Value(0)).current;
+  const streakAnim = useRef(new Animated.Value(1)).current;
+  const pointsAnim = useRef(new Animated.Value(0)).current;
+  
+  // Timer animation for time mode
+  const timerAnim = useRef(new Animated.Value(1)).current;
+  const timerRef = useRef(null);
   
   useEffect(() => {
     // Start game music when entering quiz screen
     SoundService.startGameMusic();
+    
+    // Set initial mascot state
+    setMascotType('gamemode');
+    setMascotMessage("Choose the correct answer!");
+    
     loadQuestion();
     
     return () => {
       // Stop game music when leaving
       SoundService.stopMusic();
+      
+      // Clear any running animations/timers
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
     };
   }, []);
   
@@ -36,6 +73,11 @@ const QuizScreen = ({ navigation, route }) => {
     setSelectedAnswer(null);
     setIsCorrect(null);
     setShowExplanation(false);
+    
+    // Reset animations
+    cardAnim.setValue(0);
+    fadeAnim.setValue(0);
+    explanationAnim.setValue(0);
     
     // Reset mascot to gamemode type
     setMascotType('gamemode');
@@ -48,11 +90,88 @@ const QuizScreen = ({ navigation, route }) => {
       
       // Play button sound
       SoundService.playButtonPress();
+      
+      // Create animation values for each option
+      optionsAnim.length = Object.keys(question.options || {}).length;
+      for (let i = 0; i < optionsAnim.length; i++) {
+        optionsAnim[i] = new Animated.Value(0);
+      }
+      
+      // Start animations
+      Animated.parallel([
+        Animated.timing(cardAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.back(1.5)),
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.cubic),
+        }),
+        // Staggered options animation
+        ...optionsAnim.map((anim, index) => 
+          Animated.sequence([
+            Animated.delay(400 + (index * 100)),
+            Animated.spring(anim, {
+              toValue: 1,
+              friction: 7,
+              tension: 40,
+              useNativeDriver: true,
+            }),
+          ])
+        ),
+      ]).start();
+      
+      // Start timer animation
+      Animated.timing(timerAnim, {
+        toValue: 0,
+        duration: 10000, // 10 seconds
+        useNativeDriver: false, // Need for width animation
+        easing: Easing.linear,
+      }).start();
+      
+      // Set timer to show time's up after 10 seconds
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+      
+      timerRef.current = setTimeout(() => {
+        // Only trigger if no answer selected yet
+        if (selectedAnswer === null) {
+          handleTimeUp();
+        }
+      }, 10000);
+      
     } catch (error) {
       console.error('Error loading question:', error);
     } finally {
       setIsLoading(false);
     }
+  };
+  
+  const handleTimeUp = () => {
+    // Check if already answered
+    if (selectedAnswer !== null) return;
+    
+    setSelectedAnswer('TIMEOUT');
+    setIsCorrect(false);
+    setMascotType('sad');
+    setMascotMessage("Time's up! Let's try again.");
+    
+    // Show explanation with a short delay
+    setTimeout(() => {
+      setShowExplanation(true);
+      showExplanationWithAnimation();
+    }, 500);
+    
+    // Reset streak on timeout
+    setStreak(0);
+    
+    // Play incorrect sound
+    SoundService.playIncorrect();
   };
   
   const handleAnswerSelect = (option) => {
@@ -66,6 +185,23 @@ const QuizScreen = ({ navigation, route }) => {
     if (correct) {
       setMascotType('excited');
       setMascotMessage("Great job! That's correct!");
+      
+      // Animate streak counter
+      Animated.sequence([
+        Animated.timing(streakAnim, {
+          toValue: 1.2,
+          duration: 300,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.cubic),
+        }),
+        Animated.timing(streakAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.cubic),
+        }),
+      ]).start();
+      
       SoundService.playCorrect();
     } else {
       setMascotType('sad');
@@ -78,6 +214,30 @@ const QuizScreen = ({ navigation, route }) => {
       const newStreak = streak + 1;
       setStreak(newStreak);
       setCorrectAnswers(prev => prev + 1);
+      
+      // Show points animation
+      const points = Math.round(50 + (50 * timerAnim._value)); // More points for faster answers
+      setPointsEarned(points);
+      setShowPointsAnimation(true);
+      
+      // Animate points popup
+      Animated.sequence([
+        Animated.timing(pointsAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.back(1.5)),
+        }),
+        Animated.delay(1200),
+        Animated.timing(pointsAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+          easing: Easing.in(Easing.cubic),
+        }),
+      ]).start(() => {
+        setShowPointsAnimation(false);
+      });
       
       // Handle milestone (every 5 correct answers)
       if (newStreak % 5 === 0) {
@@ -99,16 +259,37 @@ const QuizScreen = ({ navigation, route }) => {
       setStreak(0);
     }
     
-    // Show explanation after a short delay
+    // Show explanation with a short delay
     setTimeout(() => {
       setShowExplanation(true);
+      showExplanationWithAnimation();
     }, 500);
+  };
+  
+  const showExplanationWithAnimation = () => {
+    // Start explanation animation
+    Animated.spring(explanationAnim, {
+      toValue: 1,
+      friction: 7,
+      tension: 40,
+      useNativeDriver: true,
+    }).start();
   };
   
   const handleContinue = () => {
     // Play button sound
     SoundService.playButtonPress();
-    loadQuestion();
+    
+    // Hide explanation with animation
+    Animated.timing(explanationAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+      easing: Easing.in(Easing.cubic),
+    }).start(() => {
+      setShowExplanation(false);
+      loadQuestion();
+    });
   };
   
   const handleGoBack = () => {
@@ -119,9 +300,9 @@ const QuizScreen = ({ navigation, route }) => {
   
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={commonStyles.safeArea}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF9F1C" />
+          <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={styles.loadingText}>Loading question...</Text>
         </View>
       </SafeAreaView>
@@ -140,62 +321,160 @@ const QuizScreen = ({ navigation, route }) => {
   };
   
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+    <SafeAreaView style={commonStyles.safeArea}>
+      <ScrollView contentContainerStyle={styles.container}>
         {/* Header with stats */}
-        <View style={styles.header}>
+        <Animated.View 
+          style={[
+            styles.header,
+            { opacity: fadeAnim }
+          ]}
+        >
           <View style={styles.statsContainer}>
             <Text style={styles.statsText}>Correct: {correctAnswers}/{questionsAnswered}</Text>
           </View>
-          <View style={styles.streakContainer}>
+          <Animated.View 
+            style={[
+              styles.streakContainer,
+              {
+                transform: [{ scale: streakAnim }]
+              }
+            ]}
+          >
             <Icon 
               name="fire" 
               size={16} 
-              color={streak > 0 ? '#FF9F1C' : '#ccc'} 
+              color={streak > 0 ? theme.colors.primary : '#ccc'} 
             />
             <Text style={styles.streakText}>{streak}</Text>
-          </View>
-        </View>
+          </Animated.View>
+        </Animated.View>
         
         {/* Category indicator */}
-        <View style={styles.categoryContainer}>
+        <Animated.View 
+          style={[
+            styles.categoryContainer,
+            { opacity: fadeAnim }
+          ]}
+        >
           <Text style={styles.categoryText}>
             {category.charAt(0).toUpperCase() + category.slice(1)}
           </Text>
-        </View>
+        </Animated.View>
         
-        {/* Question */}
-        <View style={styles.questionContainer}>
+        {/* Timer bar - looks similar to web version */}
+        <Animated.View 
+          style={[
+            styles.timerContainer,
+            { opacity: fadeAnim }
+          ]}
+        >
+          <View style={styles.timerBar}>
+            <Animated.View 
+              style={[
+                styles.timerFill,
+                {
+                  width: timerAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0%', '100%']
+                  }),
+                  backgroundColor: timerAnim.interpolate({
+                    inputRange: [0, 0.3, 0.7, 1],
+                    outputRange: ['#ef4444', '#facc15', '#22c55e', '#22c55e']
+                  })
+                }
+              ]}
+            />
+          </View>
+        </Animated.View>
+        
+        {/* Question card */}
+        <Animated.View 
+          style={[
+            styles.questionContainer,
+            {
+              opacity: cardAnim,
+              transform: [
+                { 
+                  translateY: cardAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [20, 0]
+                  })
+                },
+                { 
+                  scale: cardAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.95, 1]
+                  })
+                }
+              ]
+            }
+          ]}
+        >
           <Text style={styles.questionText}>{currentQuestion?.question}</Text>
           
           <View style={styles.optionsContainer}>
-            {currentQuestion?.options && Object.entries(currentQuestion.options).map(([key, value]) => (
-              <TouchableOpacity
+            {currentQuestion?.options && Object.entries(currentQuestion.options).map(([key, value], index) => (
+              <Animated.View
                 key={key}
-                style={[
-                  styles.optionButton,
-                  selectedAnswer === key && (
-                    key === currentQuestion.correctAnswer ? styles.correctOption : styles.incorrectOption
-                  )
-                ]}
-                onPress={() => handleAnswerSelect(key)}
-                disabled={selectedAnswer !== null}
+                style={{
+                  opacity: optionsAnim[index] || fadeAnim,
+                  transform: [
+                    { 
+                      translateY: (optionsAnim[index] || fadeAnim).interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [20, 0]
+                      })
+                    }
+                  ]
+                }}
               >
-                <Text style={styles.optionKey}>{key}.</Text>
-                <Text style={styles.optionText}>{value}</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.optionButton,
+                    selectedAnswer === key && (
+                      key === currentQuestion.correctAnswer ? styles.correctOption : styles.incorrectOption
+                    )
+                  ]}
+                  onPress={() => handleAnswerSelect(key)}
+                  disabled={selectedAnswer !== null}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.optionKey}>{key}.</Text>
+                  <Text style={styles.optionText}>{value}</Text>
+                </TouchableOpacity>
+              </Animated.View>
             ))}
           </View>
-        </View>
+        </Animated.View>
         
         {/* Explanation */}
         {showExplanation && (
-          <View style={[
-            styles.explanationContainer,
-            isCorrect ? styles.correctExplanation : styles.incorrectExplanation
-          ]}>
+          <Animated.View 
+            style={[
+              styles.explanationContainer,
+              isCorrect ? styles.correctExplanation : styles.incorrectExplanation,
+              {
+                opacity: explanationAnim,
+                transform: [
+                  { 
+                    translateY: explanationAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [20, 0]
+                    })
+                  },
+                  { 
+                    scale: explanationAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.95, 1]
+                    })
+                  }
+                ]
+              }
+            ]}
+          >
             <Text style={styles.explanationTitle}>
-              {isCorrect ? 'Correct!' : 'Incorrect!'}
+              {isCorrect ? 'Correct!' : selectedAnswer === 'TIMEOUT' ? 'Time\'s up!' : 'Incorrect!'}
             </Text>
             <Text style={styles.explanationText}>
               {currentQuestion.explanation}
@@ -216,7 +495,7 @@ const QuizScreen = ({ navigation, route }) => {
             >
               <Text style={styles.buttonText}>Next Question</Text>
             </TouchableOpacity>
-          </View>
+          </Animated.View>
         )}
         
         {/* Exit button */}
@@ -229,25 +508,49 @@ const QuizScreen = ({ navigation, route }) => {
           </TouchableOpacity>
         )}
         
+        {/* Points animation - similar to web version */}
+        {showPointsAnimation && (
+          <Animated.View 
+            style={[
+              styles.pointsAnimationContainer,
+              {
+                opacity: pointsAnim,
+                transform: [
+                  { 
+                    translateY: pointsAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, -30]
+                    })
+                  },
+                  { 
+                    scale: pointsAnim.interpolate({
+                      inputRange: [0, 0.5, 1],
+                      outputRange: [0.8, 1.2, 1]
+                    })
+                  }
+                ]
+              }
+            ]}
+          >
+            <Text style={styles.pointsText}>+{pointsEarned}</Text>
+          </Animated.View>
+        )}
+        
         {/* Mascot */}
-        <MascotDisplay
+        <EnhancedMascotDisplay
           type={mascotType}
           position="right"
           showMascot={true}
           message={mascotMessage}
         />
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#FFF8E7',
-  },
   container: {
-    flex: 1,
+    flexGrow: 1,
     padding: 16,
   },
   loadingContainer: {
@@ -258,7 +561,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#666',
+    color: theme.colors.textMuted,
   },
   header: {
     flexDirection: 'row',
@@ -269,41 +572,34 @@ const styles = StyleSheet.create({
   },
   statsContainer: {
     backgroundColor: 'white',
-    borderRadius: 16,
+    borderRadius: theme.borderRadius.full,
     paddingVertical: 4,
     paddingHorizontal: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    ...theme.shadows.sm,
   },
   statsText: {
     fontWeight: '600',
     fontSize: 14,
+    color: theme.colors.textDark,
   },
   streakContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'white',
-    borderRadius: 16,
+    borderRadius: theme.borderRadius.full,
     paddingVertical: 4,
     paddingHorizontal: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    ...theme.shadows.sm,
   },
   streakText: {
     marginLeft: 4,
     fontWeight: '600',
-    color: '#333',
+    color: theme.colors.textDark,
   },
   categoryContainer: {
     alignSelf: 'flex-start',
-    backgroundColor: '#FF9F1C',
-    borderRadius: 16,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.full,
     paddingVertical: 4,
     paddingHorizontal: 12,
     marginBottom: 16,
@@ -313,21 +609,31 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
+  timerContainer: {
+    marginBottom: 16,
+  },
+  timerBar: {
+    height: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    borderRadius: theme.borderRadius.full,
+    overflow: 'hidden',
+  },
+  timerFill: {
+    height: '100%',
+    borderRadius: theme.borderRadius.full,
+  },
   questionContainer: {
     backgroundColor: 'white',
-    borderRadius: 16,
+    borderRadius: theme.borderRadius.lg,
     padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    ...theme.shadows.md,
   },
   questionText: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 20,
-    color: '#333',
+    color: theme.colors.textDark,
+    lineHeight: 24,
   },
   optionsContainer: {
     marginVertical: 12,
@@ -343,52 +649,54 @@ const styles = StyleSheet.create({
     borderColor: '#e9ecef',
   },
   correctOption: {
-    backgroundColor: '#d4edda',
-    borderColor: '#c3e6cb',
+    backgroundColor: 'rgba(46, 204, 113, 0.15)',
+    borderColor: 'rgba(46, 204, 113, 0.5)',
+    borderWidth: 2,
   },
   incorrectOption: {
-    backgroundColor: '#f8d7da',
-    borderColor: '#f5c6cb',
+    backgroundColor: 'rgba(231, 76, 60, 0.15)',
+    borderColor: 'rgba(231, 76, 60, 0.5)',
+    borderWidth: 2,
   },
   optionKey: {
     fontSize: 16,
     fontWeight: 'bold',
     marginRight: 8,
     width: 20,
+    color: theme.colors.textDark,
   },
   optionText: {
     fontSize: 16,
     flex: 1,
+    color: theme.colors.textDark,
   },
   explanationContainer: {
     marginTop: 20,
     borderRadius: 16,
     padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    ...theme.shadows.md,
   },
   correctExplanation: {
-    backgroundColor: '#d4edda',
-    borderColor: '#c3e6cb',
-    borderWidth: 1,
+    backgroundColor: 'rgba(46, 204, 113, 0.15)',
+    borderColor: 'rgba(46, 204, 113, 0.3)',
+    borderWidth: 2,
   },
   incorrectExplanation: {
-    backgroundColor: '#f8d7da',
-    borderColor: '#f5c6cb',
-    borderWidth: 1,
+    backgroundColor: 'rgba(231, 76, 60, 0.15)',
+    borderColor: 'rgba(231, 76, 60, 0.3)',
+    borderWidth: 2,
   },
   explanationTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 8,
+    color: theme.colors.textDark,
   },
   explanationText: {
     fontSize: 16,
     marginBottom: 16,
     lineHeight: 22,
+    color: theme.colors.textDark,
   },
   rewardContainer: {
     backgroundColor: '#fff3cd',
@@ -404,7 +712,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   continueButton: {
-    backgroundColor: '#FF9F1C',
+    backgroundColor: theme.colors.primary,
     paddingVertical: 12,
     borderRadius: 30,
     alignItems: 'center',
@@ -415,11 +723,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   backButton: {
-    position: 'absolute',
-    bottom: 24,
-    left: 16,
-    right: 16,
-    backgroundColor: '#FF9F1C',
+    marginTop: 24,
+    backgroundColor: theme.colors.primary,
     paddingVertical: 14,
     borderRadius: 30,
     alignItems: 'center',
@@ -428,6 +733,21 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '600',
     fontSize: 16,
+  },
+  pointsAnimationContainer: {
+    position: 'absolute',
+    top: '30%', 
+    right: '15%',
+    backgroundColor: 'white',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 30,
+    ...theme.shadows.md,
+  },
+  pointsText: {
+    color: theme.colors.primary,
+    fontWeight: 'bold',
+    fontSize: 20,
   },
 });
 

@@ -1,25 +1,83 @@
-// src/screens/WelcomeScreen.js
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
+// src/screens/WelcomeScreen.js (modified to match web version's style)
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  SafeAreaView,
+  Animated,
+  Easing,
+  ImageBackground,
+  Dimensions
+} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SoundService from '../services/SoundService';
-import MascotDisplay from '../components/mascot/MascotDisplay';
+import EnhancedMascotDisplay from '../components/mascot/EnhancedMascotDisplay';
+import theme from '../styles/theme';
+import commonStyles from '../styles/commonStyles';
+import animations from '../styles/animations';
+
+const { width, height } = Dimensions.get('window');
 
 const WelcomeScreen = ({ navigation }) => {
   const [currentPage, setCurrentPage] = useState(0);
   const [mascotType, setMascotType] = useState('excited');
   const [mascotMessage, setMascotMessage] = useState('Welcome to Brain Bites Mobile!');
   
+  // Animation values
+  const logoAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const buttonAnim = useRef(new Animated.Value(0)).current;
+  const cardAnim = useRef(new Animated.Value(0)).current;
+  
+  // Implement animation effects similar to web version
   useEffect(() => {
     // Start background music
     SoundService.startMenuMusic();
+    
+    // Start entrance animations
+    Animated.parallel([
+      // Fade in everything
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      
+      // Float animation for logo
+      animations.float(logoAnim, 4000),
+      
+      // Scale in the button
+      Animated.sequence([
+        Animated.delay(400),
+        Animated.spring(buttonAnim, {
+          toValue: 1,
+          friction: 7,
+          tension: 40,
+          useNativeDriver: true,
+        }),
+      ]),
+      
+      // Slide up the info cards
+      Animated.sequence([
+        Animated.delay(600),
+        Animated.spring(cardAnim, {
+          toValue: 1,
+          friction: 7,
+          tension: 40,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
     
     return () => {
       // Clean up sound when component unmounts
       SoundService.stopMusic();
     };
-  }, []);
+  }, [fadeAnim, logoAnim, buttonAnim, cardAnim]);
   
   // Update mascot based on current page
   useEffect(() => {
@@ -107,13 +165,36 @@ const WelcomeScreen = ({ navigation }) => {
   
   const page = pages[currentPage];
   
+  // Create gradient-like background with orange-to-yellow colors
+  const Gradient = () => (
+    <View style={styles.gradient}>
+      <View style={styles.gradientInner} />
+    </View>
+  );
+  
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+      <Gradient />
+      
+      <Animated.View 
+        style={[
+          styles.container,
+          { opacity: fadeAnim }
+        ]}
+      >
         <View style={styles.content}>
-          <View style={styles.iconContainer}>
-            <Icon name={page.icon} size={80} color="#FF9F1C" />
-          </View>
+          <Animated.View 
+            style={[
+              styles.logoContainer,
+              {
+                transform: [
+                  { translateY: logoAnim }
+                ]
+              }
+            ]}
+          >
+            <Icon name={page.icon} size={80} color="white" />
+          </Animated.View>
           
           <Text style={styles.title}>{page.title}</Text>
           <Text style={styles.text}>{page.text}</Text>
@@ -141,25 +222,70 @@ const WelcomeScreen = ({ navigation }) => {
             </TouchableOpacity>
           )}
           
-          <TouchableOpacity 
-            style={styles.nextButton}
-            onPress={handleNext}
+          <Animated.View
+            style={{
+              transform: [
+                { scale: buttonAnim }
+              ],
+              opacity: fadeAnim
+            }}
           >
-            <Text style={styles.nextText}>
-              {page.isLast ? "Get Started" : "Next"}
-            </Text>
-            {!page.isLast && <Icon name="arrow-right" size={20} color="white" />}
-          </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.nextButton}
+              onPress={handleNext}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.nextText}>
+                {page.isLast ? "Get Started" : "Next"}
+              </Text>
+              {!page.isLast && <Icon name="arrow-right" size={20} color="white" />}
+            </TouchableOpacity>
+          </Animated.View>
         </View>
         
+        <Animated.View
+          style={[
+            styles.infoCardsContainer,
+            {
+              transform: [
+                { translateY: cardAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [50, 0]
+                })}
+              ],
+              opacity: cardAnim
+            }
+          ]}
+        >
+          <View style={styles.infoCardsGrid}>
+            <View style={styles.infoCard}>
+              <Icon name="brain" size={24} color={theme.colors.primary} />
+              <Text style={styles.infoTitle}>Learn</Text>
+              <Text style={styles.infoText}>Test your knowledge</Text>
+            </View>
+            
+            <View style={styles.infoCard}>
+              <Icon name="video" size={24} color={theme.colors.primary} />
+              <Text style={styles.infoTitle}>Watch</Text>
+              <Text style={styles.infoText}>Earn videos as rewards</Text>
+            </View>
+            
+            <View style={styles.infoCard}>
+              <Icon name="trophy" size={24} color={theme.colors.primary} />
+              <Text style={styles.infoTitle}>Grow</Text>
+              <Text style={styles.infoText}>Build your streak</Text>
+            </View>
+          </View>
+        </Animated.View>
+        
         {/* Mascot */}
-        <MascotDisplay
+        <EnhancedMascotDisplay
           type={mascotType}
           position="right"
           showMascot={true}
           message={mascotMessage}
         />
-      </View>
+      </Animated.View>
     </SafeAreaView>
   );
 };
@@ -167,7 +293,24 @@ const WelcomeScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FFF8E7',
+    backgroundColor: theme.colors.primary,
+  },
+  gradient: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    backgroundColor: theme.colors.primary,
+  },
+  gradientInner: {
+    position: 'absolute',
+    right: 0,
+    top: '30%',
+    width: '70%',
+    height: '40%',
+    backgroundColor: theme.colors.warmYellow,
+    borderTopLeftRadius: 300,
+    borderBottomLeftRadius: 300,
+    opacity: 0.3,
   },
   container: {
     flex: 1,
@@ -179,31 +322,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  iconContainer: {
+  logoContainer: {
     width: 150,
     height: 150,
     borderRadius: 75,
-    backgroundColor: 'white',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 32,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     marginBottom: 16,
     textAlign: 'center',
-    color: '#333',
+    color: 'white',
   },
   text: {
     fontSize: 16,
     textAlign: 'center',
-    color: '#666',
+    color: 'rgba(255, 255, 255, 0.9)',
     paddingHorizontal: 16,
     lineHeight: 24,
   },
@@ -216,38 +354,69 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#ccc',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
     marginHorizontal: 5,
   },
   activeDot: {
-    backgroundColor: '#FF9F1C',
+    backgroundColor: 'white',
     width: 20,
   },
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
   },
   skipButton: {
     paddingVertical: 12,
     paddingHorizontal: 16,
   },
   skipText: {
-    color: '#666',
+    color: 'rgba(255, 255, 255, 0.8)',
     fontSize: 16,
   },
   nextButton: {
-    backgroundColor: '#FF9F1C',
+    backgroundColor: 'white',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 30,
     flexDirection: 'row',
     alignItems: 'center',
+    ...theme.shadows.md,
   },
   nextText: {
-    color: 'white',
+    color: theme.colors.primary,
     fontWeight: '600',
     fontSize: 16,
     marginRight: 4,
+  },
+  infoCardsContainer: {
+    marginBottom: 20,
+    width: '100%',
+  },
+  infoCardsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  infoCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    width: '31%',
+    aspectRatio: 0.9,
+  },
+  infoTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: 'white',
+    marginTop: 8,
+  },
+  infoText: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.9)',
+    textAlign: 'center',
+    marginTop: 4,
   },
 });
 

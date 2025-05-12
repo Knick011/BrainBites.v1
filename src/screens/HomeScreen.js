@@ -1,12 +1,27 @@
-// src/screens/HomeScreen.js - Updated to remove AppSelector navigation
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView } from 'react-native';
+// src/screens/HomeScreen.js (modified to match web version's style)
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  SafeAreaView, 
+  ScrollView,
+  Animated,
+  Easing,
+  Dimensions
+} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import TimerService from '../services/TimerService';
 import QuizService from '../services/QuizService';
 import SoundService from '../services/SoundService';
-import MascotDisplay from '../components/mascot/MascotDisplay';
+import EnhancedMascotDisplay from '../components/mascot/EnhancedMascotDisplay';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import theme from '../styles/theme';
+import commonStyles from '../styles/commonStyles';
+import animations from '../styles/animations';
+
+const { width } = Dimensions.get('window');
 
 const HomeScreen = ({ navigation }) => {
   const [availableTime, setAvailableTime] = useState(0);
@@ -14,6 +29,12 @@ const HomeScreen = ({ navigation }) => {
   const [showMascot, setShowMascot] = useState(true);
   const [mascotType, setMascotType] = useState('happy');
   const [mascotMessage, setMascotMessage] = useState(null);
+  
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const timeCardAnim = useRef(new Animated.Value(0)).current;
+  const categoryAnimValues = useRef(categories.map(() => new Animated.Value(0))).current;
   
   useEffect(() => {
     // Play menu music when entering home screen
@@ -34,6 +55,49 @@ const HomeScreen = ({ navigation }) => {
     // Set mascot message based on available time
     updateMascotMessage();
     
+    // Start entrance animations
+    Animated.parallel([
+      // Fade in everything
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      
+      // Scale in
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 700,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.back(1.5)),
+      }),
+      
+      // Time card animation
+      Animated.sequence([
+        Animated.delay(250),
+        Animated.spring(timeCardAnim, {
+          toValue: 1,
+          friction: 7,
+          tension: 40,
+          useNativeDriver: true,
+        }),
+      ]),
+      
+      // Staggered category animations
+      ...categoryAnimValues.map((anim, index) => 
+        Animated.sequence([
+          Animated.delay(500 + (index * 100)),
+          Animated.spring(anim, {
+            toValue: 1,
+            friction: 7,
+            tension: 40,
+            useNativeDriver: true,
+          }),
+        ])
+      ),
+    ]).start();
+    
     return () => {
       removeListener();
     };
@@ -43,6 +107,27 @@ const HomeScreen = ({ navigation }) => {
     // Update mascot message when time changes
     updateMascotMessage();
   }, [availableTime]);
+  
+  // Update category animations when categories change
+  useEffect(() => {
+    // Reset animation values
+    categoryAnimValues.current = categories.map(() => new Animated.Value(0));
+    
+    // Start staggered animations for categories
+    const animations = categoryAnimValues.current.map((anim, index) => 
+      Animated.sequence([
+        Animated.delay(100 + (index * 100)),
+        Animated.spring(anim, {
+          toValue: 1,
+          friction: 7,
+          tension: 40,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    
+    Animated.parallel(animations).start();
+  }, [categories]);
   
   const loadAvailableTime = async () => {
     const timeInSeconds = TimerService.getAvailableTime();
@@ -123,9 +208,9 @@ const HomeScreen = ({ navigation }) => {
   };
   
   const getCategoryColor = (category) => {
-    // Map categories to colors
+    // Map categories to colors (similar to web version)
     const colorMap = {
-      'funfacts': '#FF9F1C',
+      'funfacts': theme.colors.primary,
       'psychology': '#FF6B6B',
       'math': '#4CAF50',
       'science': '#2196F3',
@@ -134,78 +219,125 @@ const HomeScreen = ({ navigation }) => {
       'general': '#607D8B'
     };
     
-    return colorMap[category] || '#FF9F1C';
+    return colorMap[category] || theme.colors.primary;
   };
   
   const formattedTime = TimerService.formatTime(availableTime);
   
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.container}>
-        {/* Settings button */}
-        <TouchableOpacity 
-          style={styles.settingsButton}
-          onPress={handleOpenSettings}
-        >
-          <Icon name="cog" size={24} color="#333" />
-        </TouchableOpacity>
+    <SafeAreaView style={commonStyles.safeArea}>
+      <Animated.View 
+        style={[
+          styles.container,
+          {
+            opacity: fadeAnim,
+            transform: [{ scale: scaleAnim }]
+          }
+        ]}
+      >
+        <ScrollView style={styles.scrollContainer}>
+          {/* Settings button */}
+          <TouchableOpacity 
+            style={styles.settingsButton}
+            onPress={handleOpenSettings}
+          >
+            <Icon name="cog" size={24} color="#333" />
+          </TouchableOpacity>
+          
+          <View style={styles.header}>
+            <Text style={styles.title}>Brain Bites Mobile</Text>
+            <Text style={styles.subtitle}>Learn and earn app time!</Text>
+          </View>
+          
+          <Animated.View 
+            style={[
+              styles.timeCard,
+              {
+                opacity: timeCardAnim,
+                transform: [
+                  { 
+                    translateY: timeCardAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [20, 0]
+                    })
+                  }
+                ]
+              }
+            ]}
+          >
+            <Icon name="clock-outline" size={40} color={theme.colors.primary} />
+            <Text style={styles.timeTitle}>Available App Time</Text>
+            <Text style={styles.timeValue}>{formattedTime}</Text>
+          </Animated.View>
+          
+          <Text style={styles.sectionTitle}>Quiz Categories</Text>
+          
+          <View style={styles.categoriesContainer}>
+            {categories.map((category, index) => (
+              <Animated.View
+                key={category}
+                style={{
+                  opacity: categoryAnimValues.current[index] || new Animated.Value(1),
+                  transform: [
+                    { 
+                      translateY: (categoryAnimValues.current[index] || new Animated.Value(1)).interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [50, 0]
+                      })
+                    }
+                  ],
+                  width: '48%',
+                }}
+              >
+                <TouchableOpacity 
+                  style={[
+                    styles.categoryCard, 
+                    { borderColor: getCategoryColor(category) }
+                  ]}
+                  onPress={() => handleStartQuiz(category)}
+                  activeOpacity={0.8}
+                >
+                  <View 
+                    style={[
+                      styles.categoryIcon, 
+                      { backgroundColor: getCategoryColor(category) }
+                    ]}
+                  >
+                    <Icon name={getCategoryIcon(category)} size={24} color="white" />
+                  </View>
+                  <Text style={styles.categoryName}>
+                    {category.charAt(0).toUpperCase() + category.slice(1)}
+                  </Text>
+                  <Text style={styles.categorySubtext}>
+                    Answer to earn time
+                  </Text>
+                </TouchableOpacity>
+              </Animated.View>
+            ))}
+          </View>
+          
+          <View style={styles.footer} />
+        </ScrollView>
         
-        <View style={styles.header}>
-          <Text style={styles.title}>Brain Bites Mobile</Text>
-          <Text style={styles.subtitle}>Learn and earn app time!</Text>
-        </View>
-        
-        <View style={styles.timeCard}>
-          <Icon name="clock-outline" size={40} color="#FF9F1C" />
-          <Text style={styles.timeTitle}>Available App Time</Text>
-          <Text style={styles.timeValue}>{formattedTime}</Text>
-          {/* "Use Time" button removed since we're not using AppSelectorScreen */}
-        </View>
-        
-        <Text style={styles.sectionTitle}>Quiz Categories</Text>
-        
-        <View style={styles.categoriesContainer}>
-          {categories.map((category) => (
-            <TouchableOpacity 
-              key={category}
-              style={[styles.categoryCard, { borderColor: getCategoryColor(category) }]}
-              onPress={() => handleStartQuiz(category)}
-            >
-              <View style={[styles.categoryIcon, { backgroundColor: getCategoryColor(category) }]}>
-                <Icon name={getCategoryIcon(category)} size={24} color="white" />
-              </View>
-              <Text style={styles.categoryName}>
-                {category.charAt(0).toUpperCase() + category.slice(1)}
-              </Text>
-              <Text style={styles.categorySubtext}>
-                Answer to earn time
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        
-        <View style={styles.footer} />
-      </ScrollView>
-      
-      {/* Mascot component */}
-      {showMascot && (
-        <MascotDisplay
-          type={mascotType}
-          position="left"
-          showMascot={true}
-          message={mascotMessage}
-        />
-      )}
+        {/* Mascot component with web-style appearance */}
+        {showMascot && (
+          <EnhancedMascotDisplay
+            type={mascotType}
+            position="left"
+            showMascot={true}
+            message={mascotMessage}
+          />
+        )}
+      </Animated.View>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#FFF8E7',
-  },
   container: {
+    flex: 1,
+  },
+  scrollContainer: {
     flex: 1,
     padding: 16,
   },
@@ -220,11 +352,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    ...theme.shadows.sm,
   },
   header: {
     alignItems: 'center',
@@ -234,42 +362,39 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#333',
+    color: theme.colors.textDark,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: theme.colors.textMuted,
     marginTop: 8,
   },
   timeCard: {
     backgroundColor: 'white',
-    borderRadius: 16,
+    borderRadius: theme.borderRadius.lg,
     padding: 20,
     alignItems: 'center',
     marginBottom: 24,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    ...theme.shadows.md,
   },
   timeTitle: {
     fontSize: 18,
     fontWeight: '600',
     marginTop: 12,
     marginBottom: 8,
+    color: theme.colors.textDark,
   },
   timeValue: {
     fontSize: 42,
     fontWeight: 'bold',
-    color: '#FF9F1C',
+    color: theme.colors.primary,
     marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 16,
-    color: '#333',
+    color: theme.colors.textDark,
   },
   categoriesContainer: {
     flexDirection: 'row',
@@ -277,25 +402,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   categoryCard: {
-    width: '48%',
     backgroundColor: 'white',
-    borderRadius: 16,
+    borderRadius: theme.borderRadius.lg,
     padding: 16,
     marginBottom: 16,
     alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    ...theme.shadows.sm,
     borderWidth: 2,
-    borderColor: '#FF9F1C',
+    borderColor: theme.colors.primary,
   },
   categoryIcon: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#FF9F1C',
+    backgroundColor: theme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
@@ -305,14 +425,15 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 4,
     textAlign: 'center',
+    color: theme.colors.textDark,
   },
   categorySubtext: {
     fontSize: 12,
-    color: '#666',
+    color: theme.colors.textMuted,
     textAlign: 'center',
   },
   footer: {
-    height: 100,
+    height: 100, // Extra space at bottom to avoid mascot overlap
   },
 });
 
