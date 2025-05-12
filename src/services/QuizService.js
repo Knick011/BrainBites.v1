@@ -1,15 +1,34 @@
 // src/services/QuizService.js
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import CSVReader from '../utils/CSVReader';
+import RNFS from 'react-native-fs';
+import Papa from 'papaparse';
+import { Platform } from 'react-native';
 
-// Add direct import for questions as a more reliable fallback
-// Convert your CSV to JSON and place it in this location
-let questionsJson = [];
-try {
-  questionsJson = require('../assets/data/questions.json');
-} catch (e) {
-  console.log('Questions JSON not available, will try CSV or fallback');
-}
+// For worst-case scenarios
+const FALLBACK_QUESTIONS = [
+  {
+    id: 'A1',
+    category: 'funfacts',
+    question: 'How many hearts does an octopus have?',
+    optionA: '1',
+    optionB: '2',
+    optionC: '3',
+    optionD: '4',
+    correctAnswer: 'C',
+    explanation: 'Octopuses have three hearts: two pump blood through the gills and one pumps it through the body.'
+  },
+  {
+    id: 'B1',
+    category: 'psychology',
+    question: 'What is the term for the tendency to recall unfinished tasks better than completed ones?',
+    optionA: 'Zeigarnik effect',
+    optionB: 'Dunning-Kruger effect',
+    optionC: 'Placebo effect',
+    optionD: 'Hawthorne effect',
+    correctAnswer: 'A',
+    explanation: 'The Zeigarnik effect describes how people remember uncompleted tasks better than completed ones due to psychological tension.'
+  }
+];
 
 class QuizService {
   constructor() {
@@ -17,11 +36,30 @@ class QuizService {
     this.usedQuestionIds = new Set();
     this.categoryCounts = {};
     this.STORAGE_KEY = 'brainbites_quiz_data';
-    this.loadSavedData();
-    this.loadQuestions();
+    this.isInitialized = false;
   }
   
-  // Load previously saved quiz data from storage
+  async initialize() {
+    try {
+      await this.loadSavedData();
+      await this.loadQuestions();
+      this._updateCategoryCounts();
+      this.isInitialized = true;
+      console.log('Quiz service initialized successfully');
+      return Promise.resolve();
+    } catch (error) {
+      console.error('Error initializing quiz service:', error);
+      
+      // Use fallback questions if loading fails
+      console.log('Using fallback questions');
+      this.questions = FALLBACK_QUESTIONS;
+      this._updateCategoryCounts();
+      this.isInitialized = true;
+      
+      return Promise.resolve();
+    }
+  }
+  
   async loadSavedData() {
     try {
       const data = await AsyncStorage.getItem(this.STORAGE_KEY);
@@ -34,7 +72,6 @@ class QuizService {
     }
   }
   
-  // Save quiz data to storage
   async saveData() {
     try {
       const data = {
@@ -47,71 +84,122 @@ class QuizService {
     }
   }
   
-  // Load questions from CSV file with multiple fallback strategies
   async loadQuestions() {
-    console.log('Starting to load questions...');
+    console.log('Loading questions...');
     
-    // Track if we've successfully loaded questions
-    let questionsLoaded = false;
-    
-    // Try multiple strategies for loading questions
-    
-    // Strategy 1: Try loading from CSV in assets/data
     try {
-      console.log('Attempting to load questions from CSV...');
-      const questionData = await CSVReader.readCSV('questions.csv', 'assets/data');
-      
-      // Process the data
-      if (questionData && questionData.length > 0) {
-        this.questions = questionData.filter(item => item.id && item.question);
-        if (this.questions.length > 0) {
-          questionsLoaded = true;
-          console.log(`Successfully loaded ${this.questions.length} questions from CSV`);
-        }
-      }
-    } catch (error) {
-      console.log('Error loading questions from CSV (Strategy 1):', error.message);
-    }
-    
-    // Strategy 2: Try loading from src/assets/data
-    if (!questionsLoaded) {
-      try {
-        console.log('Attempting to load questions from src/assets/data...');
-        const questionData = await CSVReader.readCSV('questions.csv', 'src/assets/data');
+      // For Android, use raw asset access
+      if (Platform.OS === 'android') {
+        console.log('Attempting to read from Android assets');
         
-        if (questionData && questionData.length > 0) {
-          this.questions = questionData.filter(item => item.id && item.question);
-          if (this.questions.length > 0) {
-            questionsLoaded = true;
-            console.log(`Successfully loaded ${this.questions.length} questions from src/assets/data CSV`);
+        try {
+          // Try in root asset folder
+          const fileContent = await RNFS.readFileAssets('questions.csv');
+          const parsedQuestions = await this._parseCSVContent(fileContent);
+          if (parsedQuestions.length > 0) {
+            this.questions = parsedQuestions;
+            console.log(`Loaded ${this.questions.length} questions from Android assets`);
+            return;
+          }
+        } catch (assetError) {
+          console.log('Error reading from root assets folder:', assetError.message);
+          
+          // Try with different paths
+          try {
+            const fileContent = await RNFS.readFileAssets('raw/questions.csv');
+            const parsedQuestions = await this._parseCSVContent(fileContent);
+            if (parsedQuestions.length > 0) {
+              this.questions = parsedQuestions;
+              console.log(`Loaded ${this.questions.length} questions from Android raw assets`);
+              return;
+            }
+          } catch (rawError) {
+            console.log('Error reading from raw assets folder:', rawError.message);
           }
         }
-      } catch (error) {
-        console.log('Error loading questions from CSV (Strategy 2):', error.message);
       }
+      
+      // For iOS or if Android asset loading failed, try main bundle
+      if (Platform.OS === 'ios') {
+        console.log('Attempting to read from iOS main bundle');
+        
+        try {
+          const mainBundlePath = `${RNFS.MainBundlePath}/questions.csv`;
+          const exists = await RNFS.exists(mainBundlePath);
+          
+          if (exists) {
+            const fileContent = await RNFS.readFile(mainBundlePath, 'utf8');
+            const parsedQuestions = await this._parseCSVContent(fileContent);
+            if (parsedQuestions.length > 0) {
+              this.questions = parsedQuestions;
+              console.log(`Loaded ${this.questions.length} questions from iOS main bundle`);
+              return;
+            }
+          } else {
+            console.log('CSV file not found in main bundle');
+          }
+        } catch (bundleError) {
+          console.log('Error reading from main bundle:', bundleError.message);
+        }
+      }
+      
+      // Try to load from document directory as last resort
+      try {
+        const docDirPath = `${RNFS.DocumentDirectoryPath}/questions.csv`;
+        const exists = await RNFS.exists(docDirPath);
+        
+        if (exists) {
+          const fileContent = await RNFS.readFile(docDirPath, 'utf8');
+          const parsedQuestions = await this._parseCSVContent(fileContent);
+          if (parsedQuestions.length > 0) {
+            this.questions = parsedQuestions;
+            console.log(`Loaded ${this.questions.length} questions from document directory`);
+            return;
+          }
+        }
+      } catch (docError) {
+        console.log('Error reading from document directory:', docError.message);
+      }
+      
+      // If all attempts failed, throw to trigger fallback
+      throw new Error('Failed to load questions from any location');
+      
+    } catch (error) {
+      console.error('Could not load questions:', error);
+      
+      // We'll use the fallback questions (handled in initialize)
+      throw error;
     }
-    
-    // Strategy 3: Use the imported JSON if available
-    if (!questionsLoaded && questionsJson.length > 0) {
-      console.log('Using pre-imported questions JSON...');
-      this.questions = questionsJson;
-      questionsLoaded = true;
-      console.log(`Loaded ${this.questions.length} questions from bundled JSON`);
-    }
-    
-    // Strategy 4: If all else fails, use hardcoded fallback questions
-    if (!questionsLoaded) {
-      console.log('All loading strategies failed, using fallback questions');
-      this.setupFallbackQuestions();
-      questionsLoaded = true;
-    }
-    
-    // Update category counts after loading questions via any method
-    this._updateCategoryCounts();
-    console.log('Available categories:', Object.keys(this.categoryCounts));
   }
   
-  // Update the counts of questions by category
+  async _parseCSVContent(content) {
+    return new Promise((resolve, reject) => {
+      try {
+        Papa.parse(content, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => {
+            if (results.errors && results.errors.length > 0) {
+              console.warn('CSV parsing warnings:', results.errors);
+            }
+            
+            if (!results.data || results.data.length === 0) {
+              reject(new Error('CSV parsing produced no data'));
+              return;
+            }
+            
+            resolve(results.data);
+          },
+          error: (error) => {
+            reject(error);
+          }
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+  
   _updateCategoryCounts() {
     this.categoryCounts = {};
     this.questions.forEach(q => {
@@ -124,117 +212,27 @@ class QuizService {
     });
   }
   
-  // The rest of the methods remain the same
-  
-  // Set up fallback questions in case CSV loading fails
-  setupFallbackQuestions() {
-    console.log('Using fallback questions');
-    
-    // Create a minimal set of fallback questions
-    this.questions = [
-      {
-        id: 'A1',
-        category: 'funfacts',
-        question: 'Which planet is known as the Red Planet?',
-        optionA: 'Venus',
-        optionB: 'Mars',
-        optionC: 'Jupiter',
-        optionD: 'Saturn',
-        correctAnswer: 'B',
-        explanation: 'Mars is called the Red Planet because of the reddish iron oxide on its surface.'
-      },
-      {
-        id: 'B1',
-        category: 'psychology',
-        question: 'What is the fear of spiders called?',
-        optionA: 'Arachnophobia',
-        optionB: 'Acrophobia',
-        optionC: 'Agoraphobia',
-        optionD: 'Aerophobia',
-        correctAnswer: 'A',
-        explanation: 'Arachnophobia is the intense fear of spiders and other arachnids.'
-      },
-      {
-        id: 'C1',
-        category: 'math',
-        question: 'What is the square root of 144?',
-        optionA: '10',
-        optionB: '11',
-        optionC: '12',
-        optionD: '13',
-        correctAnswer: 'C',
-        explanation: 'The square root of 144 is 12 because 12² = 144.'
-      },
-      {
-        id: 'D1',
-        category: 'science',
-        question: 'What is the chemical symbol for gold?',
-        optionA: 'Au',
-        optionB: 'Ag',
-        optionC: 'Fe',
-        optionD: 'Ge',
-        correctAnswer: 'A',
-        explanation: "The chemical symbol for gold is Au from the Latin word 'aurum'."
-      },
-      {
-        id: 'E1',
-        category: 'history',
-        question: 'Who was the first President of the United States?',
-        optionA: 'Thomas Jefferson',
-        optionB: 'John Adams',
-        optionC: 'George Washington',
-        optionD: 'Benjamin Franklin',
-        correctAnswer: 'C',
-        explanation: 'George Washington served as the first President of the United States from 1789 to 1797.'
-      },
-      {
-        id: 'F1',
-        category: 'english',
-        question: 'What is the past tense of the verb "to go"?',
-        optionA: 'Gone',
-        optionB: 'Went',
-        optionC: 'Going',
-        optionD: 'Goed',
-        correctAnswer: 'B',
-        explanation: 'The past tense of "to go" is "went" while "gone" is the past participle.'
-      },
-      {
-        id: 'G1',
-        category: 'general',
-        question: 'Which is the largest ocean on Earth?',
-        optionA: 'Atlantic Ocean',
-        optionB: 'Indian Ocean',
-        optionC: 'Southern Ocean',
-        optionD: 'Pacific Ocean',
-        correctAnswer: 'D',
-        explanation: "The Pacific Ocean is the largest and deepest ocean on Earth, covering more than 30% of the Earth's surface."
-      }
-    ];
-    
-    // Update category counts for fallbacks
-    this._updateCategoryCounts();
-    
-    console.log('Fallback questions loaded successfully');
-  }
-  
-  // Get a random question from a specific category
   async getRandomQuestion(category = 'funfacts') {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+    
     try {
       // Filter questions by category
       const categoryQuestions = this.questions.filter(q => q.category === category);
       
       if (categoryQuestions.length === 0) {
         console.warn(`No questions found for category: ${category}`);
-        return this.getFallbackQuestion(category);
+        return this._getFallbackQuestion(category);
       }
       
       // Filter out recently used questions
       const availableQuestions = categoryQuestions.filter(q => !this.usedQuestionIds.has(q.id));
       
-      // If we've used too many questions (more than 80% of the category), reset tracking for this category
-      if (availableQuestions.length < 0.2 * this.categoryCounts[category]) {
-        // Clear only the used questions for this specific category
-        const categoryPrefix = category[0].toUpperCase();
+      // If we've used too many questions, reset tracking for this category
+      if (availableQuestions.length === 0) {
+        // Clear used questions for this category
+        const categoryPrefix = category.charAt(0).toUpperCase();
         this.usedQuestionIds.forEach(id => {
           if (id.startsWith(categoryPrefix)) {
             this.usedQuestionIds.delete(id);
@@ -242,18 +240,10 @@ class QuizService {
         });
         
         await this.saveData();
-        console.log(`Reset tracking for category ${category}`);
-        
-        // Try again with refreshed tracking
         return this.getRandomQuestion(category);
       }
       
-      // If still no available questions, return a fallback
-      if (availableQuestions.length === 0) {
-        return this.getFallbackQuestion(category);
-      }
-      
-      // Pick a truly random question
+      // Pick a random question
       const randomIndex = Math.floor(Math.random() * availableQuestions.length);
       const question = availableQuestions[randomIndex];
       
@@ -261,9 +251,7 @@ class QuizService {
       this.usedQuestionIds.add(question.id);
       await this.saveData();
       
-      console.log(`Selected question ${question.id} from ${availableQuestions.length} available questions`);
-      
-      // Format the question object to match what the app expects
+      // Format the question
       return {
         id: question.id,
         question: question.question,
@@ -278,68 +266,60 @@ class QuizService {
       };
     } catch (error) {
       console.error('Error getting random question:', error);
-      return this.getFallbackQuestion(category);
+      return this._getFallbackQuestion(category);
     }
   }
   
-  // The rest of your methods remain unchanged
-  getFallbackQuestion(category) {
-    const fallbacks = {
-      'funfacts': {
-        id: 'fallback-funfacts',
-        question: "Which planet is closest to the Sun?",
-        options: {
-          A: "Earth",
-          B: "Venus",
-          C: "Mercury",
-          D: "Mars"
-        },
-        correctAnswer: "C",
-        explanation: "Mercury is the closest planet to the Sun in our solar system."
-      },
-      'psychology': {
-        id: 'fallback-psychology',
-        question: "What is the study of dreams called?",
-        options: {
-          A: "Oneirology",
-          B: "Neurology",
-          C: "Psychology",
-          D: "Psychiatry"
-        },
-        correctAnswer: "A",
-        explanation: "Oneirology is the scientific study of dreams."
-      },
-      // Rest of fallbacks remain the same
-      'default': {
-        id: 'fallback-default',
-        question: "What is the capital of France?",
-        options: {
-          A: "London",
-          B: "Berlin",
-          C: "Paris",
-          D: "Madrid"
-        },
-        correctAnswer: "C",
-        explanation: "Paris is the capital and largest city of France."
-      }
-    };
+  _getFallbackQuestion(category) {
+    // Try to find a fallback for this category
+    const categoryFallbacks = FALLBACK_QUESTIONS.filter(q => q.category === category);
     
-    return fallbacks[category] || fallbacks['default'];
+    if (categoryFallbacks.length > 0) {
+      const question = categoryFallbacks[0];
+      return {
+        id: question.id,
+        question: question.question,
+        options: {
+          A: question.optionA,
+          B: question.optionB,
+          C: question.optionC,
+          D: question.optionD
+        },
+        correctAnswer: question.correctAnswer,
+        explanation: question.explanation
+      };
+    }
+    
+    // Default fallback
+    return {
+      id: 'fallback-default',
+      question: "What is the capital of France?",
+      options: {
+        A: "London",
+        B: "Berlin",
+        C: "Paris",
+        D: "Madrid"
+      },
+      correctAnswer: "C",
+      explanation: "Paris is the capital and largest city of France."
+    };
   }
   
-  // Get available categories
   async getCategories() {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+    
     try {
       // Get unique categories from questions
       const categories = [...new Set(this.questions.map(q => q.category))];
-      return categories.length > 0 ? categories : ['funfacts', 'psychology', 'math', 'science', 'history', 'english', 'general'];
+      return categories.length > 0 ? categories : ['funfacts', 'psychology'];
     } catch (error) {
       console.error('Error fetching categories:', error);
-      return ['funfacts', 'psychology', 'math', 'science', 'history', 'english', 'general'];
+      return ['funfacts', 'psychology'];
     }
   }
   
-  // Clear used questions tracking
   async resetUsedQuestions() {
     this.usedQuestionIds.clear();
     await this.saveData();

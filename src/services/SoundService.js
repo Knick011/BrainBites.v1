@@ -9,6 +9,7 @@ class SoundService {
   constructor() {
     this.sounds = {};
     this.soundsEnabled = true;
+    this.isInitialized = false;
     this.loadSoundsEnabled();
   }
   
@@ -24,203 +25,160 @@ class SoundService {
   }
   
   async initSounds() {
-    // Check if sounds are already loaded
-    if (Object.keys(this.sounds).length > 0) return;
+    // Skip if already initialized
+    if (this.isInitialized) return Promise.resolve();
     
     return new Promise((resolve) => {
-      try {
-        console.log("Starting to initialize sounds...");
-        
-        // Load each sound individually for better error isolation
-        this._loadSound('buttonpress', require('../../assets/sounds/buttonpress.mp3'));
-        this._loadSound('menuMusic', require('../../assets/sounds/menu_music.mp3'));
-        this._loadSound('gameMusic', require('../../assets/sounds/gamemusic.mp3'));
-        this._loadSound('streak', require('../../assets/sounds/streak.mp3'));
-        this._loadSound('correct', require('../../assets/sounds/correct.mp3'));
-        this._loadSound('incorrect', require('../../assets/sounds/incorrect.mp3'));
-        
-        // Give a little time for sounds to initialize before resolving
-        setTimeout(() => {
-          const loadedCount = Object.keys(this.sounds).length;
-          console.log(`Initialized ${loadedCount} sounds`);
-          resolve();
-        }, 500);
-      } catch (error) {
-        console.error("Error initializing sounds:", error);
-        
-        // Fall back to dummy sounds in case of error
-        this._initDummySounds();
+      console.log("Initializing sounds...");
+      
+      // Load sounds one by one to isolate any issues
+      this._loadSoundFile('buttonpress', 'buttonpress.mp3');
+      this._loadSoundFile('menuMusic', 'menu_music.mp3');
+      this._loadSoundFile('gameMusic', 'gamemusic.mp3');
+      this._loadSoundFile('streak', 'streak.mp3');
+      this._loadSoundFile('correct', 'correct.mp3');
+      this._loadSoundFile('incorrect', 'incorrect.mp3');
+      
+      // Set a timeout to resolve even if some sounds fail to load
+      setTimeout(() => {
+        this.isInitialized = true;
+        console.log("Sound initialization complete");
         resolve();
-      }
+      }, 2000);
     });
   }
   
-  // Helper method to load an individual sound
-  _loadSound(key, soundPath) {
+  _loadSoundFile(soundName, filename) {
+    // Load sound from the bundled assets folder
+    Sound.loadSoundFromActiveSoundLibrary = true;
+    
+    // Use the correct path format for React Native
+    const soundPath = filename;
+    
     try {
-      console.log(`Attempting to load sound: ${key}`);
-      
-      const sound = new Sound(soundPath, (error) => {
+      // This is the correct way to load sounds in React Native
+      const sound = new Sound(soundPath, Sound.MAIN_BUNDLE, (error) => {
         if (error) {
-          console.error(`Failed to load sound ${key}:`, error);
-          // Create a dummy sound for this failed sound
-          this.sounds[key] = this._createDummySound(key);
+          console.log(`Error loading sound ${soundName}: ${error}`);
         } else {
-          // Success - sound is loaded
-          console.log(`Sound ${key} loaded successfully`);
-          this.sounds[key] = sound;
+          console.log(`Sound ${soundName} loaded successfully`);
+          this.sounds[soundName] = sound;
           
-          // Set volume and loop settings for background music
-          if (key === 'menuMusic' || key === 'gameMusic') {
+          // Configure specific sounds
+          if (soundName === 'menuMusic' || soundName === 'gameMusic') {
             sound.setVolume(0.5);
           }
         }
       });
-    } catch (e) {
-      console.error(`Error loading sound ${key}:`, e);
-      this.sounds[key] = this._createDummySound(key);
+    } catch (error) {
+      console.error(`Error creating sound ${soundName}:`, error);
     }
-  }
-  
-  // Create a dummy sound object that logs instead of playing
-  _createDummySound(name) {
-    return {
-      play: (callback) => { 
-        console.log(`[SOUND SIMULATION] Playing ${name} sound`);
-        if (callback) callback(true);
-      },
-      stop: () => { console.log(`[SOUND SIMULATION] Stopping ${name} sound`); },
-      setVolume: () => {},
-      setNumberOfLoops: () => {},
-      setCurrentTime: () => {},
-      release: () => {}
-    };
-  }
-  
-  // Fallback method for when sound files aren't available
-  _initDummySounds() {
-    const soundNames = [
-      'buttonpress',
-      'menuMusic',
-      'gameMusic',
-      'streak',
-      'correct',
-      'incorrect'
-    ];
-    
-    soundNames.forEach(name => {
-      this.sounds[name] = this._createDummySound(name);
-    });
-    
-    console.log('Using simulated sounds - no actual sound files will be played');
   }
   
   async play(soundName, options = {}) {
     if (!this.soundsEnabled) return null;
     
-    // Make sure sounds are initialized
-    if (Object.keys(this.sounds).length === 0) {
-      await this.initSounds();
-    }
-    
     const sound = this.sounds[soundName];
     if (!sound) {
-      console.error(`Sound ${soundName} not found`);
+      console.log(`Sound ${soundName} not available`);
       return null;
     }
     
-    // Reset to start (in case the sound was already playing)
-    if (sound.stop) sound.stop();
-    if (sound.setCurrentTime) sound.setCurrentTime(0);
-    
-    // Apply options
-    if (options.volume !== undefined && sound.setVolume) {
-      sound.setVolume(options.volume);
-    }
-    
-    if (options.loops !== undefined && sound.setNumberOfLoops) {
-      sound.setNumberOfLoops(options.loops);
-    }
-    
-    // Play the sound
-    sound.play((success) => {
-      if (!success) {
-        console.error(`Failed to play sound ${soundName}`);
+    try {
+      // Reset sound to beginning
+      sound.stop();
+      sound.setCurrentTime(0);
+      
+      // Apply options
+      if (options.volume !== undefined) {
+        sound.setVolume(options.volume);
       }
-    });
-    
-    return sound;
+      
+      if (options.loops !== undefined) {
+        sound.setNumberOfLoops(options.loops);
+      }
+      
+      // Play the sound
+      sound.play((success) => {
+        if (!success) {
+          console.log(`Failed to play ${soundName}`);
+        }
+      });
+      
+      return sound;
+    } catch (error) {
+      console.error(`Error playing sound ${soundName}:`, error);
+      return null;
+    }
   }
   
-  // Rest of the methods remain unchanged
-  
   stop(soundName) {
-    if (this.sounds[soundName] && this.sounds[soundName].stop) {
-      this.sounds[soundName].stop();
+    try {
+      if (this.sounds[soundName]) {
+        this.sounds[soundName].stop();
+      }
+    } catch (error) {
+      console.error(`Error stopping sound ${soundName}:`, error);
     }
   }
   
   stopAll() {
-    Object.values(this.sounds).forEach(sound => {
-      if (sound && sound.stop) sound.stop();
-    });
+    try {
+      Object.values(this.sounds).forEach(sound => {
+        if (sound && sound.stop) sound.stop();
+      });
+    } catch (error) {
+      console.error(`Error stopping all sounds:`, error);
+    }
   }
   
   toggleSounds(enabled) {
     this.soundsEnabled = enabled;
     AsyncStorage.setItem('brainbites_sounds_enabled', enabled.toString());
     
-    // If sounds are disabled, stop all currently playing sounds
     if (!enabled) {
       this.stopAll();
     }
   }
   
-  // Play a button press sound (common action)
   async playButtonPress() {
-    return await this.play('buttonpress');
+    return this.play('buttonpress');
   }
   
-  // Play a success sound
   async playCorrect() {
-    return await this.play('correct');
+    return this.play('correct');
   }
   
-  // Play an error sound
   async playIncorrect() {
-    return await this.play('incorrect');
+    return this.play('incorrect');
   }
   
-  // Play streak achievement sound
   async playStreak() {
-    return await this.play('streak');
+    return this.play('streak');
   }
   
-  // Start menu background music
   async startMenuMusic() {
     this.stop('gameMusic');
-    return await this.play('menuMusic', { volume: 0.3, loops: -1 });
+    return this.play('menuMusic', { volume: 0.3, loops: -1 });
   }
   
-  // Start game background music
   async startGameMusic() {
     this.stop('menuMusic');
-    return await this.play('gameMusic', { volume: 0.3, loops: -1 });
+    return this.play('gameMusic', { volume: 0.3, loops: -1 });
   }
   
-  // Stop all background music
   stopMusic() {
     this.stop('menuMusic');
     this.stop('gameMusic');
   }
   
-  // Clean up when the app is closing
   cleanup() {
     this.stopAll();
     Object.values(this.sounds).forEach(sound => {
       if (sound && sound.release) sound.release();
     });
     this.sounds = {};
+    this.isInitialized = false;
   }
 }
 
