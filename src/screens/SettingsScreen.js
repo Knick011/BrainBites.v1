@@ -216,11 +216,14 @@ const SettingsScreen = ({ navigation }) => {
           </View>
           
           <View style={styles.settingItem}>
-            <View>
-              <Text style={styles.settingLabel}>Correct Answer Reward</Text>
-              <Text style={styles.settingDescription}>
-                Time added for each correct answer
-              </Text>
+            <View style={styles.settingLabelContainer}>
+              <Icon name="check-circle-outline" size={20} color="#4CAF50" style={styles.settingIcon} />
+              <View>
+                <Text style={styles.settingLabel}>Correct Answer Reward</Text>
+                <Text style={styles.settingDescription}>
+                  Time added for each correct answer
+                </Text>
+              </View>
             </View>
             <View style={styles.rewardSelector}>
               <TouchableOpacity 
@@ -254,11 +257,14 @@ const SettingsScreen = ({ navigation }) => {
           </View>
           
           <View style={styles.settingItem}>
-            <View>
-              <Text style={styles.settingLabel}>Milestone Reward</Text>
-              <Text style={styles.settingDescription}>
-                Bonus time for streak milestones (every 5)
-              </Text>
+            <View style={styles.settingLabelContainer}>
+              <Icon name="fire" size={20} color="#FF9F1C" style={styles.settingIcon} />
+              <View>
+                <Text style={styles.settingLabel}>Milestone Reward</Text>
+                <Text style={styles.settingDescription}>
+                  Bonus time for streak milestones (every 5)
+                </Text>
+              </View>
             </View>
             <View style={styles.rewardSelector}>
               <TouchableOpacity 
@@ -300,11 +306,14 @@ const SettingsScreen = ({ navigation }) => {
           </View>
           
           <View style={styles.settingItem}>
-            <View>
-              <Text style={styles.settingLabel}>Show Mascot</Text>
-              <Text style={styles.settingDescription}>
-                Display the helpful mascot character
-              </Text>
+            <View style={styles.settingLabelContainer}>
+              <Icon name="account-cowboy-hat" size={20} color="#9C27B0" style={styles.settingIcon} />
+              <View>
+                <Text style={styles.settingLabel}>Show Mascot</Text>
+                <Text style={styles.settingDescription}>
+                  Display the helpful mascot character
+                </Text>
+              </View>
             </View>
             <Switch
               value={showMascot}
@@ -316,11 +325,14 @@ const SettingsScreen = ({ navigation }) => {
           </View>
           
           <View style={styles.settingItem}>
-            <View>
-              <Text style={styles.settingLabel}>Sound Effects</Text>
-              <Text style={styles.settingDescription}>
-                Play sounds for actions and events
-              </Text>
+            <View style={styles.settingLabelContainer}>
+              <Icon name="volume-high" size={20} color="#2196F3" style={styles.settingIcon} />
+              <View>
+                <Text style={styles.settingLabel}>Sound Effects</Text>
+                <Text style={styles.settingDescription}>
+                  Play sounds for actions and events
+                </Text>
+              </View>
             </View>
             <Switch
               value={soundsEnabled}
@@ -475,6 +487,14 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+  },
+  settingLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  settingIcon: {
+    marginRight: 12,
+    marginTop: 2,
   },
   settingLabel: {
     fontSize: 16,

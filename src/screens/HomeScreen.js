@@ -34,6 +34,7 @@ const HomeScreen = ({ navigation }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
   const timeCardAnim = useRef(new Animated.Value(0)).current;
+  const bounceAnim = useRef(new Animated.Value(0)).current;
   
   // Initialize with empty animation values array
   const categoryAnimValues = useRef([]).current;
@@ -88,6 +89,24 @@ const HomeScreen = ({ navigation }) => {
           useNativeDriver: true,
         }),
       ]),
+      
+      // Bounce animation for time icon
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(bounceAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+            easing: Easing.inOut(Easing.ease),
+          }),
+          Animated.timing(bounceAnim, {
+            toValue: 0,
+            duration: 1000,
+            useNativeDriver: true,
+            easing: Easing.inOut(Easing.ease),
+          }),
+        ])
+      ),
       
       // Staggered category animations (will be added in initializeCategoryAnimations)
     ]).start();
@@ -206,8 +225,8 @@ const HomeScreen = ({ navigation }) => {
       'math': 'calculator-variant-outline',
       'science': 'flask-outline',
       'history': 'book-open-page-variant-outline',
-      'english': 'alphabetical',
-      'general': 'clipboard-text-outline'
+      'english': 'alphabetical-variant',
+      'general': 'text-box-outline'
     };
     
     return iconMap[category] || 'help-circle-outline';
@@ -277,7 +296,19 @@ const HomeScreen = ({ navigation }) => {
               }
             ]}
           >
-            <Icon name="clock-outline" size={40} color={theme.colors.primary} />
+            {/* Enhanced icon with pulse animation */}
+            <Animated.View
+              style={{
+                transform: [
+                  { scale: bounceAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [1, 1.1]
+                  })}
+                ]
+              }}
+            >
+              <Icon name="timer-sand" size={40} color={theme.colors.primary} />
+            </Animated.View>
             <Text style={styles.timeTitle}>Available App Time</Text>
             <Text style={styles.timeValue}>{formattedTime}</Text>
           </Animated.View>
@@ -323,6 +354,10 @@ const HomeScreen = ({ navigation }) => {
                   <Text style={styles.categorySubtext}>
                     Answer to earn time
                   </Text>
+                  {/* Added small arrow icon to indicate action */}
+                  <View style={styles.categoryArrow}>
+                    <Icon name="arrow-right-circle" size={18} color={getCategoryColor(category)} />
+                  </View>
                 </TouchableOpacity>
               </Animated.View>
             ))}
@@ -446,6 +481,11 @@ const styles = StyleSheet.create({
   },
   footer: {
     height: 100, // Extra space at bottom to avoid mascot overlap
+  },
+  categoryArrow: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
   },
 });
 

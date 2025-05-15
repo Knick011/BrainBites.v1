@@ -219,6 +219,7 @@ const WelcomeScreen = ({ navigation }) => {
               onPress={handleSkip}
             >
               <Text style={styles.skipText}>Skip</Text>
+              <Icon name="chevron-double-right" size={16} color="rgba(255, 255, 255, 0.8)" />
             </TouchableOpacity>
           )}
           
@@ -238,7 +239,10 @@ const WelcomeScreen = ({ navigation }) => {
               <Text style={styles.nextText}>
                 {page.isLast ? "Get Started" : "Next"}
               </Text>
-              {!page.isLast && <Icon name="arrow-right" size={20} color="white" />}
+              {page.isLast ? 
+                <Icon name="rocket-launch" size={20} color={theme.colors.primary} /> :
+                <Icon name="arrow-right" size={20} color={theme.colors.primary} />
+              }
             </TouchableOpacity>
           </Animated.View>
         </View>
@@ -259,19 +263,19 @@ const WelcomeScreen = ({ navigation }) => {
         >
           <View style={styles.infoCardsGrid}>
             <View style={styles.infoCard}>
-              <Icon name="brain" size={24} color={theme.colors.primary} />
+              <Icon name="brain" size={28} color={theme.colors.primary} />
               <Text style={styles.infoTitle}>Learn</Text>
               <Text style={styles.infoText}>Test your knowledge</Text>
             </View>
             
             <View style={styles.infoCard}>
-              <Icon name="video" size={24} color={theme.colors.primary} />
+              <Icon name="video-wireless-outline" size={28} color={theme.colors.primary} />
               <Text style={styles.infoTitle}>Watch</Text>
               <Text style={styles.infoText}>Earn videos as rewards</Text>
             </View>
             
             <View style={styles.infoCard}>
-              <Icon name="trophy" size={24} color={theme.colors.primary} />
+              <Icon name="trophy-award" size={28} color={theme.colors.primary} />
               <Text style={styles.infoTitle}>Grow</Text>
               <Text style={styles.infoText}>Build your streak</Text>
             </View>
@@ -370,10 +374,13 @@ const styles = StyleSheet.create({
   skipButton: {
     paddingVertical: 12,
     paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   skipText: {
     color: 'rgba(255, 255, 255, 0.8)',
     fontSize: 16,
+    marginRight: 6,
   },
   nextButton: {
     backgroundColor: 'white',

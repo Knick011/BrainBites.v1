@@ -508,27 +508,51 @@ const QuizScreen = ({ navigation, route }) => {
                     styles.optionButton,
                     selectedAnswer === key && (
                       key === currentQuestion.correctAnswer ? styles.correctOption : styles.incorrectOption
-                    )
+                    ),
+                    // Add hover effect when no selection yet
+                    selectedAnswer === null && styles.hoverableOption
                   ]}
                   onPress={() => handleAnswerSelect(key)}
                   disabled={selectedAnswer !== null}
                   activeOpacity={0.8}
                 >
-                  <View style={styles.optionKeyContainer}>
-                    <Text style={styles.optionKey}>{key}</Text>
+                  <View style={[
+                    styles.optionKeyContainer,
+                    // Change background color based on selection
+                    selectedAnswer === key && key === currentQuestion.correctAnswer && styles.correctKeyContainer,
+                    selectedAnswer === key && key !== currentQuestion.correctAnswer && styles.incorrectKeyContainer
+                  ]}>
+                    <Text style={[
+                      styles.optionKey,
+                      // Change text color based on selection
+                      selectedAnswer === key && styles.selectedOptionKeyText
+                    ]}>{key}</Text>
                   </View>
+                  
                   <Text style={styles.optionText}>{value}</Text>
                   
+                  {/* Result icons with enhanced visual feedback */}
                   {selectedAnswer === key && key === currentQuestion.correctAnswer && (
-                    <Icon name="check-circle" size={24} color="#4CAF50" style={styles.resultIcon} />
+                    <View style={styles.resultIconContainer}>
+                      <Icon name="check-circle" size={24} color="#4CAF50" style={styles.resultIcon} />
+                    </View>
                   )}
                   
                   {selectedAnswer === key && key !== currentQuestion.correctAnswer && (
-                    <Icon name="close-circle" size={24} color="#F44336" style={styles.resultIcon} />
+                    <View style={styles.resultIconContainer}>
+                      <Icon name="close-circle" size={24} color="#F44336" style={styles.resultIcon} />
+                    </View>
                   )}
                   
                   {selectedAnswer !== key && selectedAnswer !== null && key === currentQuestion.correctAnswer && (
-                    <Icon name="check-circle-outline" size={24} color="#4CAF50" style={styles.resultIcon} />
+                    <View style={styles.resultIconContainer}>
+                      <Icon name="check-circle-outline" size={24} color="#4CAF50" style={styles.resultIcon} />
+                    </View>
+                  )}
+                  
+                  {/* Add subtle arrow icon when no selection yet to indicate this is clickable */}
+                  {selectedAnswer === null && (
+                    <Icon name="chevron-right" size={20} color="#ccc" style={styles.optionArrow} />
                   )}
                 </TouchableOpacity>
               </Animated.View>
@@ -992,5 +1016,26 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: Platform.OS === 'ios' ? 'Avenir-Black' : 'sans-serif-black',
   },
-  
+  hoverableOption: {
+    // This is for a subtle hover effect
+    borderColor: '#ddd',
+  },
+  correctKeyContainer: {
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+  },
+  incorrectKeyContainer: {
+    backgroundColor: 'rgba(244, 67, 54, 0.2)',
+  },
+  selectedOptionKeyText: {
+    color: 'white',
+  },
+  resultIconContainer: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 2,
+  },
+  optionArrow: {
+    position: 'absolute',
+    right: 16,
+  },
 });

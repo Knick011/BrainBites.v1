@@ -1,5 +1,6 @@
 // src/services/AppLauncher.js
-import { Linking } from 'react-native';
+import { Linking, StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import TimerService from './TimerService';
 
 // App schemes for deep linking
@@ -10,6 +11,10 @@ const APP_SCHEMES = {
   twitter: 'twitter://',
   youtube: 'youtube://',
   snapchat: 'snapchat://',
+  pinterest: 'pinterest://',
+  reddit: 'reddit://',
+  linkedin: 'linkedin://',
+  whatsapp: 'whatsapp://',
   // Add more apps as needed
 };
 
@@ -17,7 +22,7 @@ const APP_SCHEMES = {
 const APP_INFO = {
   tiktok: {
     name: 'TikTok',
-    icon: 'video',
+    icon: 'music-note',
     color: '#000000',
     backgroundColor: '#ffffff',
   },
@@ -51,7 +56,64 @@ const APP_INFO = {
     color: '#FFFC00',
     backgroundColor: '#ffffff',
   },
-  // Add more apps as needed
+  pinterest: {
+    name: 'Pinterest',
+    icon: 'pinterest',
+    color: '#E60023',
+    backgroundColor: '#ffffff',
+  },
+  reddit: {
+    name: 'Reddit',
+    icon: 'reddit',
+    color: '#FF4500',
+    backgroundColor: '#ffffff',
+  },
+  linkedin: {
+    name: 'LinkedIn',
+    icon: 'linkedin',
+    color: '#0077B5',
+    backgroundColor: '#ffffff',
+  },
+  whatsapp: {
+    name: 'WhatsApp',
+    icon: 'whatsapp',
+    color: '#25D366',
+    backgroundColor: '#ffffff',
+  },
+};
+
+// Example of enhanced app launcher card UI
+const AppLauncherCard = ({ app, timeAvailable, onLaunch }) => {
+  return (
+    <TouchableOpacity 
+      style={styles.appCard}
+      onPress={() => onLaunch(app.id)}
+      disabled={timeAvailable <= 0}
+    >
+      <View 
+        style={[
+          styles.appIconContainer, 
+          { backgroundColor: app.backgroundColor, borderColor: app.color }
+        ]}
+      >
+        <Icon name={app.icon} size={32} color={app.color} />
+      </View>
+      
+      <Text style={styles.appName}>{app.name}</Text>
+      
+      <View style={styles.timeIndicator}>
+        <Icon name="clock-outline" size={14} color="#777" />
+        <Text style={styles.timeText}>{formatTime(timeAvailable)}</Text>
+      </View>
+      
+      <Icon 
+        name="chevron-right" 
+        size={20} 
+        color={timeAvailable > 0 ? app.color : "#ccc"} 
+        style={styles.launchIcon} 
+      />
+    </TouchableOpacity>
+  );
 };
 
 class AppLauncher {
@@ -138,5 +200,53 @@ class AppLauncher {
     });
   }
 }
+
+// Additional styles
+const styles = StyleSheet.create({
+  appCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  appIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    marginRight: 16,
+  },
+  appName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  timeIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    marginRight: 8,
+  },
+  timeText: {
+    fontSize: 12,
+    marginLeft: 4,
+    color: '#555',
+  },
+  launchIcon: {
+    marginLeft: 8,
+  },
+});
 
 export default new AppLauncher();
