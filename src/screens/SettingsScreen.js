@@ -1,4 +1,4 @@
-// src/screens/SettingsScreen.js
+// src/screens/SettingsScreen.js (Updated with improved icons and UI)
 import React, { useState, useEffect } from 'react';
 import { 
   View, 
@@ -8,24 +8,29 @@ import {
   Switch, 
   ScrollView, 
   SafeAreaView, 
-  Alert 
+  Alert,
+  StatusBar,
+  Platform 
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import TimerService from '../services/TimerService';
 import QuizService from '../services/QuizService';
 import SoundService from '../services/SoundService';
-import MascotDisplay from '../components/mascot/MascotDisplay';
+import ScoreService from '../services/ScoreService';
 
 const SettingsScreen = ({ navigation }) => {
   const [normalReward, setNormalReward] = useState(30); // Seconds for correct answer
   const [milestoneReward, setMilestoneReward] = useState(120); // Seconds for milestone
   const [showMascot, setShowMascot] = useState(true);
   const [soundsEnabled, setSoundsEnabled] = useState(true);
-  const [mascotMessage, setMascotMessage] = useState("Change your settings here!");
+  const [totalScore, setTotalScore] = useState(0);
+  const [highestStreak, setHighestStreak] = useState(0);
+  const [appVersion, setAppVersion] = useState("1.0.0");
   
   useEffect(() => {
     loadSettings();
+    loadScoreData();
   }, []);
   
   const loadSettings = async () => {
@@ -57,6 +62,18 @@ const SettingsScreen = ({ navigation }) => {
     }
   };
   
+  const loadScoreData = async () => {
+    try {
+      // Load score and streak data
+      await ScoreService.loadSavedData();
+      const scoreInfo = ScoreService.getScoreInfo();
+      setTotalScore(scoreInfo.totalScore);
+      setHighestStreak(scoreInfo.highestStreak);
+    } catch (error) {
+      console.error('Error loading score data:', error);
+    }
+  };
+  
   const handleClearProgress = async () => {
     // Play button sound
     SoundService.playButtonPress();
@@ -65,21 +82,31 @@ const SettingsScreen = ({ navigation }) => {
       // Display confirmation dialog
       Alert.alert(
         'Reset All Progress',
-        'This will reset all your progress, time credits, and question history. This cannot be undone.',
+        'This will reset all your progress, time credits, scores, streaks, and question history. This cannot be undone.',
         [
           {
             text: 'Cancel',
             style: 'cancel',
           },
           {
-            text: 'Reset',
+            text: 'Reset Everything',
             style: 'destructive',
             onPress: async () => {
               // Clear AsyncStorage
-              await AsyncStorage.clear();
+              await AsyncStorage.multiRemove([
+                'brainbites_timer_data',
+                'brainbites_quiz_data',
+                'brainbites_score_data',
+                'brainbites_leaderboard'
+              ]);
               
               // Reset services
               await QuizService.resetUsedQuestions();
+              ScoreService.resetSession();
+              
+              // Reload data
+              loadSettings();
+              loadScoreData();
               
               // Return to home
               navigation.navigate('Home');
@@ -117,10 +144,6 @@ const SettingsScreen = ({ navigation }) => {
     
     setShowMascot(value);
     AsyncStorage.setItem('brainbites_show_mascot', value.toString());
-    
-    if (value) {
-      setMascotMessage("Hi there! I'm back!");
-    }
   };
   
   const handleToggleSounds = (value) => {
@@ -133,9 +156,6 @@ const SettingsScreen = ({ navigation }) => {
     // Play test sound if enabled
     if (value) {
       SoundService.playButtonPress();
-      setMascotMessage("Sounds are now ON!");
-    } else {
-      setMascotMessage("Sounds are now OFF.");
     }
   };
   
@@ -146,9 +166,6 @@ const SettingsScreen = ({ navigation }) => {
     // Add 5 minutes (300 seconds) for testing
     TimerService.addTimeCredits(300);
     Alert.alert('Added 5 minutes of test time');
-    
-    // Update mascot message
-    setMascotMessage("You've added 5 minutes of test time!");
   };
   
   const handleGoBack = () => {
@@ -159,7 +176,8 @@ const SettingsScreen = ({ navigation }) => {
   
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.container}>
+      <StatusBar backgroundColor="#FFF8E7" barStyle="dark-content" />
+      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
         <View style={styles.header}>
           <TouchableOpacity 
             style={styles.backButton}
@@ -171,8 +189,31 @@ const SettingsScreen = ({ navigation }) => {
           <View style={{ width: 24 }} />
         </View>
         
+        {/* Stats Section */}
+        <View style={styles.statsSection}>
+          <Text style={styles.statsSectionTitle}>Your Stats</Text>
+          
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <Icon name="star" size={28} color="#FF9F1C" style={styles.statIcon} />
+              <Text style={styles.statValue}>{totalScore.toLocaleString()}</Text>
+              <Text style={styles.statLabel}>Total Score</Text>
+            </View>
+            
+            <View style={styles.statItem}>
+              <Icon name="fire" size={28} color="#FF9F1C" style={styles.statIcon} />
+              <Text style={styles.statValue}>{highestStreak}</Text>
+              <Text style={styles.statLabel}>Highest Streak</Text>
+            </View>
+          </View>
+        </View>
+        
+        {/* Time Rewards Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Time Rewards</Text>
+          <View style={styles.sectionTitleRow}>
+            <Icon name="clock-time-four-outline" size={22} color="#FF9F1C" />
+            <Text style={styles.sectionTitle}>Time Rewards</Text>
+          </View>
           
           <View style={styles.settingItem}>
             <View>
@@ -183,22 +224,31 @@ const SettingsScreen = ({ navigation }) => {
             </View>
             <View style={styles.rewardSelector}>
               <TouchableOpacity 
-                style={styles.rewardButton}
+                style={[
+                  styles.rewardButton,
+                  normalReward === 15 && styles.selectedRewardButton
+                ]}
                 onPress={() => handleRewardChange('normal', 15)}
               >
-                <Text style={normalReward === 15 ? styles.selectedReward : styles.rewardText}>15s</Text>
+                <Text style={normalReward === 15 ? styles.selectedRewardText : styles.rewardText}>15s</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={styles.rewardButton}
+                style={[
+                  styles.rewardButton,
+                  normalReward === 30 && styles.selectedRewardButton
+                ]}
                 onPress={() => handleRewardChange('normal', 30)}
               >
-                <Text style={normalReward === 30 ? styles.selectedReward : styles.rewardText}>30s</Text>
+                <Text style={normalReward === 30 ? styles.selectedRewardText : styles.rewardText}>30s</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={styles.rewardButton}
+                style={[
+                  styles.rewardButton,
+                  normalReward === 60 && styles.selectedRewardButton
+                ]}
                 onPress={() => handleRewardChange('normal', 60)}
               >
-                <Text style={normalReward === 60 ? styles.selectedReward : styles.rewardText}>1m</Text>
+                <Text style={normalReward === 60 ? styles.selectedRewardText : styles.rewardText}>1m</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -212,29 +262,42 @@ const SettingsScreen = ({ navigation }) => {
             </View>
             <View style={styles.rewardSelector}>
               <TouchableOpacity 
-                style={styles.rewardButton}
+                style={[
+                  styles.rewardButton,
+                  milestoneReward === 60 && styles.selectedRewardButton
+                ]}
                 onPress={() => handleRewardChange('milestone', 60)}
               >
-                <Text style={milestoneReward === 60 ? styles.selectedReward : styles.rewardText}>1m</Text>
+                <Text style={milestoneReward === 60 ? styles.selectedRewardText : styles.rewardText}>1m</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={styles.rewardButton}
+                style={[
+                  styles.rewardButton,
+                  milestoneReward === 120 && styles.selectedRewardButton
+                ]}
                 onPress={() => handleRewardChange('milestone', 120)}
               >
-                <Text style={milestoneReward === 120 ? styles.selectedReward : styles.rewardText}>2m</Text>
+                <Text style={milestoneReward === 120 ? styles.selectedRewardText : styles.rewardText}>2m</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={styles.rewardButton}
+                style={[
+                  styles.rewardButton,
+                  milestoneReward === 300 && styles.selectedRewardButton
+                ]}
                 onPress={() => handleRewardChange('milestone', 300)}
               >
-                <Text style={milestoneReward === 300 ? styles.selectedReward : styles.rewardText}>5m</Text>
+                <Text style={milestoneReward === 300 ? styles.selectedRewardText : styles.rewardText}>5m</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
         
+        {/* App Preferences Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>App Preferences</Text>
+          <View style={styles.sectionTitleRow}>
+            <Icon name="tune-vertical" size={22} color="#FF9F1C" />
+            <Text style={styles.sectionTitle}>App Preferences</Text>
+          </View>
           
           <View style={styles.settingItem}>
             <View>
@@ -248,6 +311,7 @@ const SettingsScreen = ({ navigation }) => {
               onValueChange={handleToggleMascot}
               trackColor={{ false: '#e0e0e0', true: '#FF9F1C' }}
               thumbColor={showMascot ? '#fff' : '#fff'}
+              ios_backgroundColor="#e0e0e0"
             />
           </View>
           
@@ -263,18 +327,23 @@ const SettingsScreen = ({ navigation }) => {
               onValueChange={handleToggleSounds}
               trackColor={{ false: '#e0e0e0', true: '#FF9F1C' }}
               thumbColor={soundsEnabled ? '#fff' : '#fff'}
+              ios_backgroundColor="#e0e0e0"
             />
           </View>
         </View>
         
+        {/* Data Management Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Data Management</Text>
+          <View style={styles.sectionTitleRow}>
+            <Icon name="database" size={22} color="#FF9F1C" />
+            <Text style={styles.sectionTitle}>Data Management</Text>
+          </View>
           
           <TouchableOpacity 
             style={styles.dangerButton}
             onPress={handleClearProgress}
           >
-            <Icon name="delete-outline" size={20} color="white" />
+            <Icon name="delete-outline" size={22} color="white" />
             <Text style={styles.dangerButtonText}>Reset All Progress</Text>
           </TouchableOpacity>
           
@@ -282,26 +351,17 @@ const SettingsScreen = ({ navigation }) => {
             style={styles.testButton}
             onPress={handleAddTestTime}
           >
-            <Icon name="clock-plus-outline" size={20} color="white" />
+            <Icon name="clock-plus-outline" size={22} color="white" />
             <Text style={styles.testButtonText}>Add Test Time (5 min)</Text>
           </TouchableOpacity>
         </View>
         
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Brain Bites Mobile</Text>
-          <Text style={styles.versionText}>Version 1.0.0</Text>
+          <Icon name="brain" size={32} color="#FF9F1C" style={styles.footerIcon} />
+          <Text style={styles.footerText}>Brain Bites</Text>
+          <Text style={styles.versionText}>Version {appVersion}</Text>
         </View>
       </ScrollView>
-      
-      {/* Mascot */}
-      {showMascot && (
-        <MascotDisplay
-          type="below"
-          position="right"
-          showMascot={true}
-          message={mascotMessage}
-        />
-      )}
     </SafeAreaView>
   );
 };
@@ -313,7 +373,10 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    padding: 16,
+  },
+  contentContainer: {
+    padding: 20,
+    paddingBottom: 40,
   },
   header: {
     flexDirection: 'row',
@@ -323,35 +386,93 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   backButton: {
-    padding: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   title: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
+    fontFamily: Platform.OS === 'ios' ? 'Avenir-Heavy' : 'sans-serif-medium',
   },
-  section: {
+  statsSection: {
     backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 24,
+    padding: 20,
     marginBottom: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
   },
-  sectionTitle: {
+  statsSectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 16,
     color: '#333',
+    fontFamily: Platform.OS === 'ios' ? 'Avenir-Heavy' : 'sans-serif-medium',
+    textAlign: 'center',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statIcon: {
+    marginBottom: 8,
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+    fontFamily: Platform.OS === 'ios' ? 'Avenir-Black' : 'sans-serif-black',
+  },
+  statLabel: {
+    fontSize: 14,
+    color: '#777',
+    marginTop: 2,
+    fontFamily: Platform.OS === 'ios' ? 'Avenir' : 'sans-serif',
+  },
+  section: {
+    backgroundColor: 'white',
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginLeft: 8,
+    color: '#333',
+    fontFamily: Platform.OS === 'ios' ? 'Avenir-Heavy' : 'sans-serif-medium',
   },
   settingItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
@@ -359,74 +480,108 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 4,
+    color: '#333',
+    fontFamily: Platform.OS === 'ios' ? 'Avenir-Medium' : 'sans-serif-medium',
   },
   settingDescription: {
     fontSize: 14,
-    color: '#666',
+    color: '#777',
     maxWidth: 200,
+    fontFamily: Platform.OS === 'ios' ? 'Avenir' : 'sans-serif',
   },
   rewardSelector: {
     flexDirection: 'row',
   },
   rewardButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: '#f5f5f5',
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  selectedRewardButton: {
+    backgroundColor: '#FFE5B4',
+    borderWidth: 2,
+    borderColor: '#FF9F1C',
   },
   rewardText: {
     fontSize: 14,
     color: '#666',
+    fontFamily: Platform.OS === 'ios' ? 'Avenir-Medium' : 'sans-serif',
   },
-  selectedReward: {
+  selectedRewardText: {
     fontSize: 14,
     color: '#FF9F1C',
     fontWeight: 'bold',
+    fontFamily: Platform.OS === 'ios' ? 'Avenir-Heavy' : 'sans-serif-medium',
   },
   dangerButton: {
     backgroundColor: '#F44336',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 16,
+    borderRadius: 16,
     marginTop: 8,
+    shadowColor: 'rgba(244, 67, 54, 0.4)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   dangerButtonText: {
     color: 'white',
     fontWeight: '600',
     marginLeft: 8,
+    fontSize: 16,
+    fontFamily: Platform.OS === 'ios' ? 'Avenir-Heavy' : 'sans-serif-medium',
   },
   testButton: {
     backgroundColor: '#2196F3',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 16,
+    borderRadius: 16,
     marginTop: 16,
+    shadowColor: 'rgba(33, 150, 243, 0.4)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   testButtonText: {
     color: 'white',
     fontWeight: '600',
     marginLeft: 8,
+    fontSize: 16,
+    fontFamily: Platform.OS === 'ios' ? 'Avenir-Heavy' : 'sans-serif-medium',
   },
   footer: {
     alignItems: 'center',
     marginVertical: 24,
   },
+  footerIcon: {
+    marginBottom: 8,
+  },
   footerText: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
+    fontFamily: Platform.OS === 'ios' ? 'Avenir-Heavy' : 'sans-serif-medium',
   },
   versionText: {
     fontSize: 14,
-    color: '#666',
-    marginTop: 8,
+    color: '#777',
+    marginTop: 4,
+    fontFamily: Platform.OS === 'ios' ? 'Avenir' : 'sans-serif',
   },
 });
 

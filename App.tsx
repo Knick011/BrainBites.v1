@@ -1,130 +1,148 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
+// App.tsx (Updated with enhanced components and proper navigation)
+import React, { useEffect, useState } from 'react';
+import { StatusBar, View, Text, ActivityIndicator, StyleSheet, LogBox, Platform } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator, StackCardStyleInterpolator } from '@react-navigation/stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import React from 'react';
-import type {PropsWithChildren} from 'react';
-import {
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  View,
-} from 'react-native';
+// Import updated screens
+import WelcomeScreen from './src/screens/WelcomeScreen';
+import HomeScreen from './src/screens/HomeScreen';
+import QuizScreen from './src/screens/QuizScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
+// Import services
+import TimerService from './src/services/TimerService';
+import SoundService from './src/services/SoundService';
+import QuizService from './src/services/QuizService';
+import ScoreService from './src/services/ScoreService';
 
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
+// Ignore specific warnings that might come from third-party libraries
+LogBox.ignoreLogs([
+  'ViewPropTypes will be removed',
+  'ColorPropType will be removed',
+]);
 
-function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+// Stack navigator type
+type RootStackParamList = {
+  Welcome: undefined;
+  Home: undefined;
+  Quiz: { category?: string };
+  Settings: undefined;
+};
+
+const Stack = createStackNavigator<RootStackParamList>();
+
+const App = () => {
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [isFirstLaunch, setIsFirstLaunch] = useState(true);
+  
+  // Setup and initialize services
+  useEffect(() => {
+    const initializeServices = async () => {
+      try {
+        console.log("Initializing services...");
+        
+        // First check if this is the first launch
+        const hasLaunchedBefore = await AsyncStorage.getItem('brainbites_onboarding_complete');
+        setIsFirstLaunch(hasLaunchedBefore !== 'true');
+        
+        // Initialize the sound service
+        await SoundService.initSounds();
+        console.log("Sound service initialized successfully");
+        
+        // Initialize the quiz service
+        await QuizService.initialize();
+        console.log("Quiz service initialized successfully");
+        
+        // Initialize score service
+        await ScoreService.loadSavedData();
+        console.log("Score service initialized successfully");
+        
+        // Load saved time data
+        await TimerService.loadSavedTime();
+        console.log("Timer service initialized successfully");
+        
+        // Delay a bit to make sure everything is ready
+        setTimeout(() => {
+          setIsInitializing(false);
+        }, 1000);
+      } catch (error) {
+        console.error("Error initializing services:", error);
+        setIsInitializing(false);
+      }
+    };
+
+    initializeServices();
+    
+    // Cleanup when app unmounts
+    return () => {
+      TimerService.cleanup();
+      SoundService.cleanup();
+    };
+  }, []);
+
+  // Show a loading screen while initializing
+  if (isInitializing) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FF9F1C" />
+        <Text style={styles.loadingText}>Loading Brain Bites...</Text>
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
+    <SafeAreaProvider>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFF8E7" />
+      <NavigationContainer>
+        <Stack.Navigator 
+          initialRouteName={isFirstLaunch ? "Welcome" : "Home"}
+          screenOptions={{
+            headerShown: false,
+            cardStyle: { backgroundColor: '#FFF8E7' },
+            // Add fancy transition effects
+            cardStyleInterpolator: ({ current, layouts }) => {
+              return {
+                cardStyle: {
+                  transform: [
+                    {
+                      translateY: current.progress.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [layouts.screen.height, 0],
+                      }),
+                    },
+                  ],
+                  opacity: current.progress,
+                },
+              };
+            },
+          }}
+        >
+          <Stack.Screen name="Welcome" component={WelcomeScreen} />
+          <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen name="Quiz" component={QuizScreen} />
+          <Stack.Screen name="Settings" component={SettingsScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
-}
-
-function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
-  };
-
-  /*
-   * To keep the template simple and small we're adding padding to prevent view
-   * from rendering under the System UI.
-   * For bigger apps the recommendation is to use `react-native-safe-area-context`:
-   * https://github.com/AppAndFlow/react-native-safe-area-context
-   *
-   * You can read more about it here:
-   * https://github.com/react-native-community/discussions-and-proposals/discussions/827
-   */
-  const safePadding = '5%';
-
-  return (
-    <View style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        style={backgroundStyle}>
-        <View style={{paddingRight: safePadding}}>
-          <Header/>
-        </View>
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-            paddingHorizontal: safePadding,
-            paddingBottom: safePadding,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </View>
-  );
-}
+};
 
 const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFF8E7',
   },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  sectionDescription: {
-    marginTop: 8,
+  loadingText: {
+    marginTop: 16,
     fontSize: 18,
-    fontWeight: '400',
-  },
-  highlight: {
-    fontWeight: '700',
+    color: '#333',
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'Avenir-Medium' : 'sans-serif-medium',
   },
 });
 
