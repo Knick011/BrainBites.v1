@@ -15,12 +15,13 @@ class TimerService {
     this.sessionStartTime = null;
     this.pausedTime = 0;
     this.pauseStartTime = null;
+    this.appStateSubscription = null;
     
     // Load saved data on initialization
     this.loadSavedTime();
     
     // Listen for app state changes
-    AppState.addEventListener('change', this._handleAppStateChange);
+    this.appStateSubscription = AppState.addEventListener('change', this._handleAppStateChange);
   }
   
   // Handle app going to background/foreground
@@ -278,7 +279,10 @@ class TimerService {
     }
     
     // Remove the AppState event listener
-    AppState.removeEventListener('change', this._handleAppStateChange);
+    if (this.appStateSubscription) {
+      this.appStateSubscription.remove();
+      this.appStateSubscription = null;
+    }
     
     // If session is active, save the state before cleanup
     if (this.isAppRunning) {

@@ -1,4 +1,4 @@
-// src/screens/HomeScreen.js (modified to match web version's style)
+// src/screens/HomeScreen.js (fixed version)
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
@@ -34,7 +34,9 @@ const HomeScreen = ({ navigation }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
   const timeCardAnim = useRef(new Animated.Value(0)).current;
-  const categoryAnimValues = useRef(categories.map(() => new Animated.Value(0))).current;
+  
+  // Initialize with empty animation values array
+  const categoryAnimValues = useRef([]).current;
   
   useEffect(() => {
     // Play menu music when entering home screen
@@ -54,6 +56,9 @@ const HomeScreen = ({ navigation }) => {
     
     // Set mascot message based on available time
     updateMascotMessage();
+    
+    // Initialize animation values for categories
+    initializeCategoryAnimations(categories);
     
     // Start entrance animations
     Animated.parallel([
@@ -84,18 +89,7 @@ const HomeScreen = ({ navigation }) => {
         }),
       ]),
       
-      // Staggered category animations
-      ...categoryAnimValues.map((anim, index) => 
-        Animated.sequence([
-          Animated.delay(500 + (index * 100)),
-          Animated.spring(anim, {
-            toValue: 1,
-            friction: 7,
-            tension: 40,
-            useNativeDriver: true,
-          }),
-        ])
-      ),
+      // Staggered category animations (will be added in initializeCategoryAnimations)
     ]).start();
     
     return () => {
@@ -103,20 +97,20 @@ const HomeScreen = ({ navigation }) => {
     };
   }, []);
   
-  useEffect(() => {
-    // Update mascot message when time changes
-    updateMascotMessage();
-  }, [availableTime]);
-  
-  // Update category animations when categories change
-  useEffect(() => {
-    // Reset animation values
-    categoryAnimValues.current = categories.map(() => new Animated.Value(0));
+  // Initialize animation values for categories
+  const initializeCategoryAnimations = (categoriesList) => {
+    // Clear existing animation values
+    categoryAnimValues.length = 0;
     
-    // Start staggered animations for categories
-    const animations = categoryAnimValues.current.map((anim, index) => 
+    // Create animation values for each category
+    categoriesList.forEach((_, index) => {
+      categoryAnimValues[index] = new Animated.Value(0);
+    });
+    
+    // Start staggered animations
+    const animations = categoryAnimValues.map((anim, index) => 
       Animated.sequence([
-        Animated.delay(100 + (index * 100)),
+        Animated.delay(500 + (index * 100)),
         Animated.spring(anim, {
           toValue: 1,
           friction: 7,
@@ -126,7 +120,19 @@ const HomeScreen = ({ navigation }) => {
       ])
     );
     
+    // Start all animations in parallel
     Animated.parallel(animations).start();
+  };
+  
+  useEffect(() => {
+    // Update mascot message when time changes
+    updateMascotMessage();
+  }, [availableTime]);
+  
+  // Update category animations when categories change
+  useEffect(() => {
+    // Initialize animation values for new categories
+    initializeCategoryAnimations(categories);
   }, [categories]);
   
   const loadAvailableTime = async () => {
@@ -224,6 +230,12 @@ const HomeScreen = ({ navigation }) => {
   
   const formattedTime = TimerService.formatTime(availableTime);
   
+  // Ensure we have valid animation values for categories
+  const getAnimValue = (index) => {
+    // Make sure we have a valid animation value, or create a default
+    return categoryAnimValues[index] || new Animated.Value(1);
+  };
+  
   return (
     <SafeAreaView style={commonStyles.safeArea}>
       <Animated.View 
@@ -277,10 +289,10 @@ const HomeScreen = ({ navigation }) => {
               <Animated.View
                 key={category}
                 style={{
-                  opacity: categoryAnimValues.current[index] || new Animated.Value(1),
+                  opacity: getAnimValue(index),
                   transform: [
                     { 
-                      translateY: (categoryAnimValues.current[index] || new Animated.Value(1)).interpolate({
+                      translateY: getAnimValue(index).interpolate({
                         inputRange: [0, 1],
                         outputRange: [50, 0]
                       })
