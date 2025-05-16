@@ -31,75 +31,47 @@ class SoundService {
     return new Promise((resolve) => {
       console.log("Initializing sounds...");
       
-      let loadedSounds = 0;
-      const totalSounds = 6; // Total number of sounds to load
-      
-      const checkInitialization = () => {
-        loadedSounds++;
-        if (loadedSounds === totalSounds) {
-          this.isInitialized = true;
-          console.log("Sound initialization complete");
-          resolve();
-        }
-      };
-      
       // Load sounds one by one to isolate any issues
-      this._loadSoundFile('buttonpress', 'buttonpress.mp3', checkInitialization);
-      this._loadSoundFile('menuMusic', 'menu_music.mp3', checkInitialization);
-      this._loadSoundFile('gameMusic', 'gamemusic.mp3', checkInitialization);
-      this._loadSoundFile('streak', 'streak.mp3', checkInitialization);
-      this._loadSoundFile('correct', 'correct.mp3', checkInitialization);
-      this._loadSoundFile('incorrect', 'incorrect.mp3', checkInitialization);
+      this._loadSoundFile('buttonpress', 'buttonpress.mp3');
+      this._loadSoundFile('menuMusic', 'menu_music.mp3');
+      this._loadSoundFile('gameMusic', 'gamemusic.mp3');
+      this._loadSoundFile('streak', 'streak.mp3');
+      this._loadSoundFile('correct', 'correct.mp3');
+      this._loadSoundFile('incorrect', 'incorrect.mp3');
       
       // Set a timeout to resolve even if some sounds fail to load
       setTimeout(() => {
-        if (!this.isInitialized) {
-          console.warn("Sound initialization timed out - some sounds may not be available");
-          this.isInitialized = true;
-          resolve();
-        }
-      }, 5000); // Increased timeout to 5 seconds
+        this.isInitialized = true;
+        console.log("Sound initialization complete");
+        resolve();
+      }, 2000);
     });
   }
   
-  _loadSoundFile(soundName, filename, callback) {
+  _loadSoundFile(soundName, filename) {
     // Load sound from the bundled assets folder
     Sound.loadSoundFromActiveSoundLibrary = true;
     
     // Use the correct path format for React Native
-    const soundPath = `sounds/${filename}`;
+    const soundPath = filename;
     
     try {
       // This is the correct way to load sounds in React Native
       const sound = new Sound(soundPath, Sound.MAIN_BUNDLE, (error) => {
         if (error) {
-          console.error(`Error loading sound ${soundName}: ${error.message}`);
-          // Attempt to load from a different path if the first attempt fails
-          const fallbackPath = filename;
-          const fallbackSound = new Sound(fallbackPath, Sound.MAIN_BUNDLE, (fallbackError) => {
-            if (fallbackError) {
-              console.error(`Fallback loading failed for ${soundName}: ${fallbackError.message}`);
-            } else {
-              console.log(`Sound ${soundName} loaded successfully from fallback path`);
-              this.sounds[soundName] = fallbackSound;
-              this._configureSound(soundName, fallbackSound);
-            }
-          });
+          console.log(`Error loading sound ${soundName}: ${error}`);
         } else {
           console.log(`Sound ${soundName} loaded successfully`);
           this.sounds[soundName] = sound;
-          this._configureSound(soundName, sound);
+          
+          // Configure specific sounds
+          if (soundName === 'menuMusic' || soundName === 'gameMusic') {
+            sound.setVolume(0.5);
+          }
         }
       });
     } catch (error) {
       console.error(`Error creating sound ${soundName}:`, error);
-    }
-  }
-  
-  _configureSound(soundName, sound) {
-    // Configure specific sounds
-    if (soundName === 'menuMusic' || soundName === 'gameMusic') {
-      sound.setVolume(0.5);
     }
   }
   
@@ -108,4 +80,106 @@ class SoundService {
     
     const sound = this.sounds[soundName];
     if (!sound) {
-      console.log(`
+      console.log(`Sound ${soundName} not available`);
+      return null;
+    }
+    
+    try {
+      // Reset sound to beginning
+      sound.stop();
+      sound.setCurrentTime(0);
+      
+      // Apply options
+      if (options.volume !== undefined) {
+        sound.setVolume(options.volume);
+      }
+      
+      if (options.loops !== undefined) {
+        sound.setNumberOfLoops(options.loops);
+      }
+      
+      // Play the sound
+      sound.play((success) => {
+        if (!success) {
+          console.log(`Failed to play ${soundName}`);
+        }
+      });
+      
+      return sound;
+    } catch (error) {
+      console.error(`Error playing sound ${soundName}:`, error);
+      return null;
+    }
+  }
+  
+  stop(soundName) {
+    try {
+      if (this.sounds[soundName]) {
+        this.sounds[soundName].stop();
+      }
+    } catch (error) {
+      console.error(`Error stopping sound ${soundName}:`, error);
+    }
+  }
+  
+  stopAll() {
+    try {
+      Object.values(this.sounds).forEach(sound => {
+        if (sound && sound.stop) sound.stop();
+      });
+    } catch (error) {
+      console.error(`Error stopping all sounds:`, error);
+    }
+  }
+  
+  toggleSounds(enabled) {
+    this.soundsEnabled = enabled;
+    AsyncStorage.setItem('brainbites_sounds_enabled', enabled.toString());
+    
+    if (!enabled) {
+      this.stopAll();
+    }
+  }
+  
+  async playButtonPress() {
+    return this.play('buttonpress');
+  }
+  
+  async playCorrect() {
+    return this.play('correct');
+  }
+  
+  async playIncorrect() {
+    return this.play('incorrect');
+  }
+  
+  async playStreak() {
+    return this.play('streak');
+  }
+  
+  async startMenuMusic() {
+    this.stop('gameMusic');
+    return this.play('menuMusic', { volume: 0.3, loops: -1 });
+  }
+  
+  async startGameMusic() {
+    this.stop('menuMusic');
+    return this.play('gameMusic', { volume: 0.3, loops: -1 });
+  }
+  
+  stopMusic() {
+    this.stop('menuMusic');
+    this.stop('gameMusic');
+  }
+  
+  cleanup() {
+    this.stopAll();
+    Object.values(this.sounds).forEach(sound => {
+      if (sound && sound.release) sound.release();
+    });
+    this.sounds = {};
+    this.isInitialized = false;
+  }
+}
+
+export default new SoundService();
